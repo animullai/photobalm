@@ -1,0 +1,9 @@
+[build]
+  publish = "."
+  command = ""
+
+[functions]
+  directory = "netlify/functions"
+
+[template.environment]
+  DZINE_API_KEY = "Add this in Netlify → Site settings → Environment variables"
