@@ -1,42 +1,183 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Photobalm AI</title>
-    <link rel="stylesheet" href="style.css" />
-  </head>
-  <body>
-    <header>
-      <h1>Photobalm AI</h1>
-      <p>Restore and enhance your portraits with the power of AI.</p>
-    </header>
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Photobalm AI</title>
+<style>
+  :root{--ink:#0f172a;--ink-soft:#4b5563;--nav:#122647;--cream:#f7f3ea;--btn:#f6c10e;--border:#e5e7eb;--panel:#fff}
+  body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;color:var(--ink);background:var(--cream)}
+  header{background:var(--nav);color:#fff;padding:30px 16px;text-align:center}
+  header h1{margin:0 0 6px;font-size:36px}
+  header p{margin:0;color:#d9e1f2}
+  .wrap{max-width:980px;margin:24px auto;padding:0 16px}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:16px;box-shadow:0 10px 24px rgba(15,23,42,.08);padding:22px;margin:18px 0}
+  .card h2{margin:4px 0 6px}
+  .btn{display:inline-block;background:var(--btn);color:#222;padding:10px 16px;border-radius:10px;font-weight:800;border:none;cursor:pointer}
+  .btn:disabled{opacity:.6;cursor:not-allowed}
+  /* Modal */
+  .modal{position:fixed;inset:0;background:rgba(0,0,0,.4);display:none;align-items:center;justify-content:center;padding:16px}
+  .modal.show{display:flex}
+  .sheet{max-width:720px;width:100%;background:#fff;border-radius:16px;border:1px solid var(--border);box-shadow:0 12px 28px rgba(0,0,0,.25);padding:18px}
+  .row{display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap}
+  .col{flex:1 1 320px}
+  .preview{border:1px solid var(--border);border-radius:12px;overflow:hidden;min-height:220px;display:flex;align-items:center;justify-content:center;background:#fafafa}
+  .preview img{max-width:100%;height:auto;display:block}
+  .note{color:var(--ink-soft);font-size:14px;margin-top:6px}
+  .status{margin-top:10px;padding:10px;border:1px solid var(--border);border-radius:10px;background:#eef3ff;color:#0b53b3}
+  .err{background:#fff5f5;color:#a02020}
+  label{font-weight:700;margin:10px 0 6px;display:block}
+  input[type=file],select{width:100%;padding:10px;border:1px solid var(--border);border-radius:10px;background:#fff}
+  .close{float:right;font-weight:800;border:none;background:transparent;font-size:18px;cursor:pointer}
+</style>
+</head>
+<body>
+  <header>
+    <h1>Photobalm AI</h1>
+    <p>Restore and enhance your portraits with the power of AI.</p>
+  </header>
 
-    <main>
-      <section class="tool">
-        <h2>Portrait Restoration</h2>
-        <p>Enhance faces and bring old photos back to life.</p>
-        <button>Launch Tool</button>
-      </section>
+  <main class="wrap">
+    <section class="card">
+      <h2>Portrait Restoration</h2>
+      <p>Enhance faces and bring old photos back to life.</p>
+      <button class="btn" id="open-restore">Launch Tool</button>
+    </section>
 
-      <section class="tool">
-        <h2>Upscale</h2>
-        <p>Sharpen details and improve image quality for printing or sharing.</p>
-        <button>Launch Tool</button>
-      </section>
+    <section class="card">
+      <h2>Upscale</h2>
+      <p>Sharpen details and improve image quality for printing or sharing.</p>
+      <button class="btn" id="open-upscale">Launch Tool</button>
+    </section>
+  </main>
 
-      <section class="fun">
-        <h2>Fun Features</h2>
-        <ul>
-          <li><strong>Face Swap</strong>: Try out different looks or generate fun combinations.</li>
-          <li><strong>Expression Edit</strong>: Modify smiles, moods, and expressions.</li>
-          <li><strong>Character Tool</strong>: Turn portraits into stylized characters.</li>
-        </ul>
-      </section>
-    </main>
+  <!-- Portrait Restoration Modal -->
+  <div class="modal" id="modal-restore">
+    <div class="sheet">
+      <button class="close" data-close="modal-restore">✕</button>
+      <h3>Portrait Restoration</h3>
+      <div class="row">
+        <div class="col">
+          <label>Choose a photo</label>
+          <input type="file" id="r-file" accept="image/*" />
+          <label>Style</label>
+          <select id="r-style">
+            <option value="subtle">Subtle</option>
+            <option value="sharp">Sharper</option>
+          </select>
+          <p class="note">We’ll enhance faces while preserving the original look. Max ~10MB.</p>
+          <button class="btn" id="r-run">Run Restoration</button>
+          <div id="r-status" class="status" style="display:none"></div>
+        </div>
+        <div class="col">
+          <div class="preview" id="r-prev">No image yet</div>
+          <div class="preview" id="r-out" style="margin-top:10px;">Result shows here</div>
+        </div>
+      </div>
+    </div>
+  </div>
 
-    <footer>
-      <p>&copy; 2025 Photobalm. All rights reserved.</p>
-    </footer>
-  </body>
+  <!-- Upscale Modal -->
+  <div class="modal" id="modal-upscale">
+    <div class="sheet">
+      <button class="close" data-close="modal-upscale">✕</button>
+      <h3>Upscale</h3>
+      <div class="row">
+        <div class="col">
+          <label>Choose a photo</label>
+          <input type="file" id="u-file" accept="image/*" />
+          <label>Scale</label>
+          <select id="u-scale">
+            <option value="2x">2×</option>
+            <option value="4x">4×</option>
+          </select>
+          <p class="note">Improves detail and reduces noise. Max ~10MB.</p>
+          <button class="btn" id="u-run">Run Upscale</button>
+          <div id="u-status" class="status" style="display:none"></div>
+        </div>
+        <div class="col">
+          <div class="preview" id="u-prev">No image yet</div>
+          <div class="preview" id="u-out" style="margin-top:10px;">Result shows here</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script>
+  // ---------- Common helpers ----------
+  function $(id){return document.getElementById(id)}
+  function show(id){$(id).classList.add('show')}
+  function hide(id){$(id).classList.remove('show')}
+  function setStatus(el,msg,err){el.textContent=msg; el.style.display='block'; el.className = 'status' + (err?' err':'')}
+
+  // Preview file
+  function previewFile(inputEl, previewEl){
+    previewEl.innerHTML = 'No image yet'
+    const f = inputEl.files && inputEl.files[0] ? inputEl.files[0] : null
+    if(!f) return null
+    const url = URL.createObjectURL(f)
+    const img = new Image()
+    img.onload = ()=> URL.revokeObjectURL(url)
+    img.src = url
+    previewEl.innerHTML = ''
+    previewEl.appendChild(img)
+    return f
+  }
+
+  // Wire modals
+  $('open-restore').onclick = ()=> show('modal-restore')
+  $('open-upscale').onclick = ()=> show('modal-upscale')
+  document.querySelectorAll('.close').forEach(btn=>{
+    btn.addEventListener('click', ()=> hide(btn.dataset.close))
+  })
+
+  // Live previews
+  $('r-file').addEventListener('change', ()=> previewFile($('r-file'), $('r-prev')))
+  $('u-file').addEventListener('change', ()=> previewFile($('u-file'), $('u-prev')))
+
+  // ---------- Calls to Netlify Functions (keep API key secret) ----------
+  const API_RESTORE = '/.netlify/functions/restore'
+  const API_UPSCALE = '/.netlify/functions/upscale'
+
+  $('r-run').onclick = async ()=>{
+    const file = previewFile($('r-file'), $('r-prev'))
+    if(!file) return setStatus($('r-status'),'Please choose an image first.', true)
+    const style = $('r-style').value
+    setStatus($('r-status'),'Processing…')
+    try{
+      const fd = new FormData()
+      fd.append('image', file)
+      fd.append('style', style)
+      const res = await fetch(API_RESTORE, { method:'POST', body: fd })
+      if(!res.ok) throw new Error('Server error')
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      $('r-out').innerHTML = `<img src="${url}" alt="Restored result">`
+      setStatus($('r-status'),'Done! You can right-click to save.')
+    }catch(e){
+      setStatus($('r-status'),'Something went wrong. Please try again.', true)
+    }
+  }
+
+  $('u-run').onclick = async ()=>{
+    const file = previewFile($('u-file'), $('u-prev'))
+    if(!file) return setStatus($('u-status'),'Please choose an image first.', true)
+    const scale = $('u-scale').value
+    setStatus($('u-status'),'Processing…')
+    try{
+      const fd = new FormData()
+      fd.append('image', file)
+      fd.append('scale', scale)
+      const res = await fetch(API_UPSCALE, { method:'POST', body: fd })
+      if(!res.ok) throw new Error('Server error')
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      $('u-out').innerHTML = `<img src="${url}" alt="Upscaled result">`
+      setStatus($('u-status'),'Done! You can right-click to save.')
+    }catch(e){
+      setStatus($('u-status'),'Something went wrong. Please try again.', true)
+    }
+  }
+</script>
+</body>
 </html>
