@@ -1,34 +1,53 @@
 // netlify/functions/restore.js
-export async function handler(event) {
+exports.handler = async (event) => {
+  const cors = {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Headers': 'content-type',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  };
+
+  // Preflight for browsers
+  if (event.httpMethod === 'OPTIONS') {
+    return { statusCode: 200, headers: cors, body: 'ok' };
+  }
+
+  // Only allow POST
+  if (event.httpMethod !== 'POST') {
+    return { statusCode: 405, headers: cors, body: 'Method Not Allowed' };
+  }
+
   try {
-    if (event.httpMethod !== "POST")
-      return { statusCode: 405, body: "Method Not Allowed" };
+    // Expect JSON: { image_url, options }
+    const payload = JSON.parse(event.body || '{}');
+    const imageUrl = payload.image_url;
 
-    // forward the uploaded image to Dzine.ai
-    const dzineEndpoint = "https://api.dzine.ai/v1/portrait/restore";
-
-    const res = await fetch(dzineEndpoint, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${process.env.DZINE_API_KEY}`,
-        "Content-Type": "application/octet-stream",
-      },
-      body: Buffer.from(event.body, "base64"),
-    });
-
-    if (!res.ok) {
-      const txt = await res.text();
-      return { statusCode: res.status, body: txt };
+    if (!imageUrl || typeof imageUrl !== 'string') {
+      return {
+        statusCode: 400,
+        headers: cors,
+        body: 'Missing or invalid "image_url"',
+      };
     }
 
-    const arrayBuf = await res.arrayBuffer();
+    // TODO: Call your real restore pipeline here.
+    // For verification we simply echo the input URL.
+    const processed_url = imageUrl;
+
     return {
       statusCode: 200,
-      headers: { "Content-Type": res.headers.get("content-type") || "image/jpeg" },
-      body: Buffer.from(arrayBuf).toString("base64"),
-      isBase64Encoded: true,
+      headers: { ...cors, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        processed_url,
+        ok: true,
+        // echo back options for debug visibility in the UI log
+        debug: { options: payload.options || null },
+      }),
     };
   } catch (err) {
-    return { statusCode: 500, body: "Server error" };
+    return {
+      statusCode: 500,
+      headers: cors,
+      body: `Server error: ${err.message}`,
+    };
   }
-}
+};
