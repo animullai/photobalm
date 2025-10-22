@@ -15,7 +15,6 @@
   .card h2{margin:4px 0 6px}
   .btn{display:inline-block;background:var(--btn);color:#222;padding:10px 16px;border-radius:10px;font-weight:800;border:none;cursor:pointer}
   .btn:disabled{opacity:.6;cursor:not-allowed}
-  /* Modal */
   .modal{position:fixed;inset:0;background:rgba(0,0,0,.4);display:none;align-items:center;justify-content:center;padding:16px}
   .modal.show{display:flex}
   .sheet{max-width:720px;width:100%;background:#fff;border-radius:16px;border:1px solid var(--border);box-shadow:0 12px 28px rgba(0,0,0,.25);padding:18px}
@@ -135,7 +134,7 @@
   $('r-file').addEventListener('change', ()=> previewFile($('r-file'), $('r-prev')))
   $('u-file').addEventListener('change', ()=> previewFile($('u-file'), $('u-prev')))
 
-  // ---------- Calls to Netlify Functions (keep API key secret) ----------
+  // ---------- Calls to Netlify Functions ----------
   const API_RESTORE = '/.netlify/functions/restore'
   const API_UPSCALE = '/.netlify/functions/upscale'
 
@@ -145,17 +144,18 @@
     const style = $('r-style').value
     setStatus($('r-status'),'Processing…')
     try{
-      const fd = new FormData()
-      fd.append('image', file)
-      fd.append('style', style)
-      const res = await fetch(API_RESTORE, { method:'POST', body: fd })
-      if(!res.ok) throw new Error('Server error')
+      const res = await fetch(API_RESTORE, {
+        method:'POST',
+        headers:{ 'Content-Type':'application/octet-stream', 'X-Style': style },
+        body: file
+      })
+      if(!res.ok) throw new Error(await res.text())
       const blob = await res.blob()
       const url = URL.createObjectURL(blob)
       $('r-out').innerHTML = `<img src="${url}" alt="Restored result">`
       setStatus($('r-status'),'Done! You can right-click to save.')
     }catch(e){
-      setStatus($('r-status'),'Something went wrong. Please try again.', true)
+      setStatus($('r-status'), 'Something went wrong. Please try again.', true)
     }
   }
 
@@ -165,11 +165,12 @@
     const scale = $('u-scale').value
     setStatus($('u-status'),'Processing…')
     try{
-      const fd = new FormData()
-      fd.append('image', file)
-      fd.append('scale', scale)
-      const res = await fetch(API_UPSCALE, { method:'POST', body: fd })
-      if(!res.ok) throw new Error('Server error')
+      const res = await fetch(API_UPSCALE, {
+        method:'POST',
+        headers:{ 'Content-Type':'application/octet-stream', 'X-Scale': scale },
+        body: file
+      })
+      if(!res.ok) throw new Error(await res.text())
       const blob = await res.blob()
       const url = URL.createObjectURL(blob)
       $('u-out').innerHTML = `<img src="${url}" alt="Upscaled result">`
