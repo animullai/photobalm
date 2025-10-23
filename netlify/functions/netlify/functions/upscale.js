@@ -1,6 +1,5 @@
 // netlify/functions/upscale.js
-// Generates a transformed Cloudinary URL that "upscales" by targeting a larger width
-// and adds sharpening. If we don't know the original size, we choose a sensible target.
+const { parsePublicId, buildBasicAuthHeader } = require('./_cldy');
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -8,60 +7,71 @@ const CORS = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 
+const CLOUD_NAME = process.env.CLOUDINARY_CLOUD_NAME;
+const API_KEY = process.env.CLOUDINARY_API_KEY;
+const API_SECRET = process.env.CLOUDINARY_API_SECRET;
+
 exports.handler = async (event) => {
-  if (event.httpMethod === 'OPTIONS') {
-    return { statusCode: 200, headers: CORS, body: 'ok' };
-  }
-  if (event.httpMethod !== 'POST') {
-    return { statusCode: 405, headers: CORS, body: 'Method Not Allowed' };
-  }
+  if (event.httpMethod === 'OPTIONS') return { statusCode: 200, headers: CORS, body: 'ok' };
+  if (event.httpMethod !== 'POST') return { statusCode: 405, headers: CORS, body: 'Method Not Allowed' };
 
   try {
     const { image_url, options = {} } = JSON.parse(event.body || '{}');
-    if (!image_url || typeof image_url !== 'string') {
-      return { statusCode: 400, headers: CORS, body: 'Missing or invalid "image_url"' };
+    if (!image_url) return { statusCode: 400, headers: CORS, body: 'Missing image_url' };
+    if (!CLOUD_NAME || !API_KEY || !API_SECRET) {
+      console.error('[upscale] Missing env', { CLOUD_NAME: !!CLOUD_NAME, API_KEY: !!API_KEY, API_SECRET: !!API_SECRET });
+      return { statusCode: 500, headers: CORS, body: 'Cloudinary credentials not configured' };
     }
 
-    const uploadMarker = '/image/upload/';
-    const ix = image_url.indexOf(uploadMarker);
-    if (ix === -1) {
-      return {
-        statusCode: 200,
-        headers: { ...CORS, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ processed_url: image_url, note: 'non-cloudinary-url' }),
-      };
-    }
+    const publicId = parsePublicId(image_url);
+    console.log('[upscale] image_url:', image_url);
+    console.log('[upscale] publicId:', publicId);
 
-    // Requested scale factor (2,3,4). Default to 2 if missing.
+    if (!publicId) return ok({ processed_url: image_url, note: 'non-cloudinary-url' });
+
     const scale = Number.parseInt(options.scale, 10) || 2;
-
-    // Heuristic target width: if we don't know the original width,
-    // aim for a typical print/share-friendly output.
-    // You can tune these numbers later or pass actual image dimensions from the client.
     const targetWidth = scale >= 4 ? 2400 : scale === 3 ? 1800 : 1400;
 
-    // e_upscale (if available on your plan) plus sharpen; fallback to scale+unsharp mask.
-    // We’ll use: c_scale,w_<target>,e_unsharp_mask and general improvements.
-    const txParts = [
+    const recipe = [
       `c_scale,w_${targetWidth}`,
       'e_unsharp_mask:120',
       'e_improve',
       'q_auto:best',
-      'f_auto'
-    ];
-    const transformation = txParts.join(',');
+      'f_auto',
+    ].join(',');
 
-    const processed_url =
-      image_url.slice(0, ix + uploadMarker.length) +
-      transformation + '/' +
-      image_url.slice(ix + uploadMarker.length);
+    const body = new URLSearchParams({ public_id: publicId, type: 'upload', eager: recipe });
 
-    return {
-      statusCode: 200,
-      headers: { ...CORS, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ processed_url }),
-    };
+    const url = `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/explicit`;
+    console.log('[upscale] POST', url, 'recipe:', recipe);
+
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Authorization': buildBasicAuthHeader(API_KEY, API_SECRET),
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body,
+    });
+
+    const text = await res.text();
+    if (!res.ok) {
+      console.error('[upscale] Cloudinary explicit error', res.status, text);
+      return { statusCode: 502, headers: CORS, body: `Cloudinary explicit error (${res.status}): ${text}` };
+    }
+
+    let json;
+    try { json = JSON.parse(text); } catch { json = {}; }
+    const processed_url = json?.eager?.[0]?.secure_url || image_url;
+    console.log('[upscale] processed_url:', processed_url);
+
+    return ok({ processed_url });
   } catch (err) {
+    console.error('[upscale] Server error', err);
     return { statusCode: 500, headers: CORS, body: `Server error: ${err.message}` };
+  }
+
+  function ok(obj) {
+    return { statusCode: 200, headers: { ...CORS, 'Content-Type': 'application/json' }, body: JSON.stringify(obj) };
   }
 };
