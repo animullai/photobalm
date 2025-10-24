@@ -1,79 +1,52 @@
-// netlify/functions/upscale.js
-const { parsePublicId, buildSignature } = require('./_cldy');
-
-const CORS = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'content-type',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-};
-
-const CLOUD_NAME = process.env.CLOUDINARY_CLOUD_NAME;
-const API_KEY    = process.env.CLOUDINARY_API_KEY;
-const API_SECRET = process.env.CLOUDINARY_API_SECRET;
+const { cors, postJson, pollJob, BASE, UPSCALE_PATH } = require('./_dzine');
 
 exports.handler = async (event) => {
-  if (event.httpMethod === 'OPTIONS') return { statusCode: 200, headers: CORS, body: 'ok' };
-  if (event.httpMethod !== 'POST')   return { statusCode: 405, headers: CORS, body: 'Method Not Allowed' };
+  if (event.httpMethod === 'OPTIONS') return { statusCode: 200, headers: cors(), body: 'ok' };
+  if (event.httpMethod !== 'POST')   return { statusCode: 405, headers: cors(), body: 'Method Not Allowed' };
 
   try {
     const { image_url, options = {} } = JSON.parse(event.body || '{}');
-    if (!image_url) return { statusCode: 400, headers: CORS, body: 'Missing image_url' };
-    if (!CLOUD_NAME || !API_KEY || !API_SECRET)
-      return { statusCode: 500, headers: CORS, body: 'Cloudinary credentials not configured' };
+    if (!image_url) return { statusCode: 400, headers: cors(), body: 'Missing image_url' };
 
-    const publicId = parsePublicId(image_url);
-    if (!publicId) return ok({ processed_url: image_url, note: 'non-cloudinary-url' });
+    // scale could be 2,3,4 from the UI; pass through
+    const payload = { image_url, options };
+    const first = await postJson(UPSCALE_PATH, payload);
 
-    const scale       = Number.parseInt(options.scale, 10) || 2;
-    const targetWidth = scale >= 4 ? 2400 : scale === 3 ? 1800 : 1400;
-
-    const eager = [
-      `c_scale,w_${targetWidth}`,
-      'e_unsharp_mask:120',
-      'e_improve',
-      'q_auto:best',
-      'f_auto'
-    ].join(',');
-
-    const timestamp = Math.floor(Date.now() / 1000);
-    const signedParams = {
-      eager,
-      public_id: publicId,
-      timestamp,
-      type: 'upload',
-    };
-    const signature = buildSignature(signedParams, API_SECRET);
-
-    const form = new URLSearchParams({
-      ...signedParams,
-      api_key: API_KEY,
-      signature,
-    });
-
-    const url = `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/explicit`;
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: form,
-    });
-
-    const text = await res.text();
-    if (!res.ok) {
-      console.error('[upscale] Cloudinary explicit error', res.status, text);
-      return { statusCode: 502, headers: CORS, body: `Cloudinary explicit error (${res.status}): ${text}` };
+    const directUrl = first.json?.processed_url || first.json?.result_url || first.json?.url;
+    if (first.ok && directUrl) {
+      return ok({ processed_url: directUrl, dzine_endpoint: `${BASE}${UPSCALE_PATH}` });
     }
 
-    let json; try { json = JSON.parse(text); } catch { json = {}; }
-    const processed_url = json?.eager?.[0]?.secure_url || image_url;
+    const jobId  = first.json?.job_id || first.json?.id;
+    const jobUrl = first.json?.job_url || (jobId ? `${BASE}/v1/jobs/${jobId}` : null);
 
-    return ok({ processed_url });
+    if (!first.ok && !jobUrl) {
+      return err(first.status, `Dzine upscale error: ${first.text}`);
+    }
+    if (!jobUrl) {
+      return err(502, `Dzine upscale: no result URL or job to poll. Raw: ${first.text}`);
+    }
 
-  } catch (err) {
-    console.error('[upscale] Server error', err);
-    return { statusCode: 500, headers: CORS, body: `Server error: ${err.message}` };
+    const polled = await pollJob(jobUrl);
+    if (!polled.ok) {
+      return err(502, `Dzine upscale job failed: ${polled.text}`);
+    }
+
+    const finalUrl = polled.json?.processed_url || polled.json?.result_url || polled.json?.url;
+    if (!finalUrl) {
+      return err(502, `Dzine upscale job succeeded but no URL found. Raw: ${JSON.stringify(polled.json)}`);
+    }
+
+    return ok({ processed_url: finalUrl, dzine_job_url: jobUrl });
+
+  } catch (e) {
+    return err(500, `Server error: ${e.message}`);
   }
 
   function ok(obj) {
-    return { statusCode: 200, headers: { ...CORS, 'Content-Type': 'application/json' }, body: JSON.stringify(obj) };
+    return { statusCode: 200, headers: { ...cors(), 'Content-Type': 'application/json' }, body: JSON.stringify(obj) };
+  }
+  function err(code, message) {
+    return { statusCode: code, headers: cors(), body: message };
   }
 };
