@@ -1,5 +1,5 @@
 // netlify/functions/upscale.js
-const { parsePublicId, buildBasicAuthHeader } = require('./_cldy');
+const { parsePublicId, buildSignature } = require('./_cldy');
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -24,10 +24,10 @@ exports.handler = async (event) => {
     const publicId = parsePublicId(image_url);
     if (!publicId) return ok({ processed_url: image_url, note: 'non-cloudinary-url' });
 
-    const scale = Number.parseInt(options.scale, 10) || 2;
+    const scale       = Number.parseInt(options.scale, 10) || 2;
     const targetWidth = scale >= 4 ? 2400 : scale === 3 ? 1800 : 1400;
 
-    const recipe = [
+    const eager = [
       `c_scale,w_${targetWidth}`,
       'e_unsharp_mask:120',
       'e_improve',
@@ -35,25 +35,41 @@ exports.handler = async (event) => {
       'f_auto'
     ].join(',');
 
-    const body = new URLSearchParams({ public_id: publicId, type: 'upload', eager: recipe });
+    const timestamp = Math.floor(Date.now() / 1000);
+    const signedParams = {
+      eager,
+      public_id: publicId,
+      timestamp,
+      type: 'upload',
+    };
+    const signature = buildSignature(signedParams, API_SECRET);
 
-    const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/explicit`, {
+    const form = new URLSearchParams({
+      ...signedParams,
+      api_key: API_KEY,
+      signature,
+    });
+
+    const url = `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/explicit`;
+    const res = await fetch(url, {
       method: 'POST',
-      headers: {
-        'Authorization': buildBasicAuthHeader(API_KEY, API_SECRET),
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
-      body,
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: form,
     });
 
     const text = await res.text();
-    if (!res.ok) return { statusCode: 502, headers: CORS, body: `Cloudinary explicit error (${res.status}): ${text}` };
+    if (!res.ok) {
+      console.error('[upscale] Cloudinary explicit error', res.status, text);
+      return { statusCode: 502, headers: CORS, body: `Cloudinary explicit error (${res.status}): ${text}` };
+    }
 
     let json; try { json = JSON.parse(text); } catch { json = {}; }
     const processed_url = json?.eager?.[0]?.secure_url || image_url;
+
     return ok({ processed_url });
 
   } catch (err) {
+    console.error('[upscale] Server error', err);
     return { statusCode: 500, headers: CORS, body: `Server error: ${err.message}` };
   }
 
