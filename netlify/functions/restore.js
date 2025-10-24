@@ -1,54 +1,52 @@
-const { cors, postJson, pollJob, BASE, RESTORE_PATH } = require('./_dzine');
+// netlify/functions/restore.js
+const { CORS, getJson, postJson, pollProgress, firstResultUrl } = require('./_dzine_openapi');
 
 exports.handler = async (event) => {
-  if (event.httpMethod === 'OPTIONS') return { statusCode: 200, headers: cors(), body: 'ok' };
-  if (event.httpMethod !== 'POST')   return { statusCode: 405, headers: cors(), body: 'Method Not Allowed' };
+  if (event.httpMethod === 'OPTIONS') return { statusCode: 200, headers: CORS, body: 'ok' };
+  if (event.httpMethod !== 'POST')   return { statusCode: 405, headers: CORS, body: 'Method Not Allowed' };
 
   try {
     const { image_url, options = {} } = JSON.parse(event.body || '{}');
-    if (!image_url) return { statusCode: 400, headers: cors(), body: 'Missing image_url' };
+    if (!image_url) return bad(400, 'Missing image_url');
 
-    // Send to Dzine.ai — adjust keys to match your Dzine API exactly if different
-    const payload = { image_url, options };
-    const first = await postJson(RESTORE_PATH, payload);
+    // 1) Fetch style list and pick a "No Style" variant (safe, neutral)
+    const styles = await getJson('/style/list');
+    if (!styles.ok) return bad(502, `Dzine style list error: ${styles.text}`);
+    const list = styles.json?.data?.list || [];
+    // Prefer names that include "No Style"; otherwise use first available
+    const noStyle = list.find(s => /no\s*style/i.test(s?.name || '')) || list[0];
+    if (!noStyle?.style_code) return bad(502, 'Could not resolve a style_code from Dzine styles.');
 
-    // CASE A: Sync success with result URL
-    const directUrl = first.json?.processed_url || first.json?.result_url || first.json?.url;
-    if (first.ok && directUrl) {
-      return ok({ processed_url: directUrl, dzine_endpoint: `${BASE}${RESTORE_PATH}` });
-    }
+    // 2) Request img2img task
+    const body = {
+      prompt: options.prompt || 'Photo enhancement',
+      style_code: noStyle.style_code,
+      style_intensity: 0,             // neutral
+      structure_match: 0.9,           // preserve content
+      quality_mode: 1,                // high quality
+      color_match: 1,                 // keep original tones
+      generate_slots: [1,0,0,0],      // 1 output
+      images: [{ url: image_url }],
+      output_format: 'webp'
+    };
+    const start = await postJson('/create_task_img2img', body);
+    if (!start.ok) return bad(start.status || 502, `Dzine img2img error: ${start.text}`);
 
-    // CASE B: Async job — poll until ready
-    const jobId = first.json?.job_id || first.json?.id;
-    const jobUrl = first.json?.job_url || (jobId ? `${BASE}/v1/jobs/${jobId}` : null);
+    const taskId = start.json?.data?.task_id;
+    if (!taskId) return bad(502, `Dzine img2img: no task_id. Raw: ${start.text}`);
 
-    if (!first.ok && !jobUrl) {
-      return err(first.status, `Dzine restore error: ${first.text}`);
-    }
-    if (!jobUrl) {
-      return err(502, `Dzine restore: no result URL or job to poll. Raw: ${first.text}`);
-    }
+    // 3) Poll progress to completion
+    const done = await pollProgress(taskId);
+    if (!done.ok) return bad(done.status || 502, `Dzine img2img job failed: ${done.text}`);
 
-    const polled = await pollJob(jobUrl);
-    if (!polled.ok) {
-      return err(502, `Dzine restore job failed: ${polled.text}`);
-    }
+    const url = firstResultUrl(done.json);
+    if (!url) return bad(502, `Dzine img2img succeeded but no result URL. Raw: ${JSON.stringify(done.json)}`);
 
-    const finalUrl = polled.json?.processed_url || polled.json?.result_url || polled.json?.url;
-    if (!finalUrl) {
-      return err(502, `Dzine restore job succeeded but no URL found. Raw: ${JSON.stringify(polled.json)}`);
-    }
-
-    return ok({ processed_url: finalUrl, dzine_job_url: jobUrl });
-
+    return ok({ processed_url: url, dzine_task_id: taskId });
   } catch (e) {
-    return err(500, `Server error: ${e.message}`);
+    return bad(500, `Server error: ${e.message}`);
   }
 
-  function ok(obj) {
-    return { statusCode: 200, headers: { ...cors(), 'Content-Type': 'application/json' }, body: JSON.stringify(obj) };
-  }
-  function err(code, message) {
-    return { statusCode: code, headers: cors(), body: message };
-  }
+  function ok(obj)  { return { statusCode: 200, headers: { ...CORS, 'Content-Type': 'application/json' }, body: JSON.stringify(obj) }; }
+  function bad(c,m) { return { statusCode: c,   headers: CORS, body: m }; }
 };
