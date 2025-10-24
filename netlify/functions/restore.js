@@ -1,5 +1,5 @@
 // netlify/functions/restore.js
-const { parsePublicId, buildBasicAuthHeader } = require('./_cldy');
+const { parsePublicId, buildSignature } = require('./_cldy');
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -11,7 +11,7 @@ const CLOUD_NAME = process.env.CLOUDINARY_CLOUD_NAME;
 const API_KEY    = process.env.CLOUDINARY_API_KEY;
 const API_SECRET = process.env.CLOUDINARY_API_SECRET;
 
-// 🔎 DIAGNOSTIC: shows what the function actually sees (safe, redacted)
+// Env sanity log (redacted)
 console.log('[env]', {
   cloud: CLOUD_NAME,
   keyStart: API_KEY ? API_KEY.slice(0, 4) : null,
@@ -32,7 +32,7 @@ exports.handler = async (event) => {
     if (!publicId) return ok({ processed_url: image_url, note: 'non-cloudinary-url' });
 
     const subtle  = options.style === 'subtle';
-    const recipe = [
+    const eager   = [
       'e_improve',
       subtle ? 'e_unsharp_mask:40' : 'e_unsharp_mask:120',
       !subtle ? 'e_contrast:30' : '',
@@ -41,29 +41,42 @@ exports.handler = async (event) => {
       'f_auto'
     ].filter(Boolean).join(',');
 
-    const body = new URLSearchParams({ public_id: publicId, type: 'upload', eager: recipe });
-    const url  = `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/explicit`;
+    // Required signed params
+    const timestamp = Math.floor(Date.now() / 1000);
+    const signedParams = {
+      eager,
+      public_id: publicId,
+      timestamp,
+      type: 'upload',
+    };
+    const signature = buildSignature(signedParams, API_SECRET);
 
-    const res  = await fetch(url, {
+    const form = new URLSearchParams({
+      ...signedParams,
+      api_key: API_KEY,
+      signature,
+    });
+
+    const url = `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/explicit`;
+    const res = await fetch(url, {
       method: 'POST',
-      headers: {
-        'Authorization': buildBasicAuthHeader(API_KEY, API_SECRET),
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
-      body,
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: form,
     });
 
     const text = await res.text();
     if (!res.ok) {
-      // surfaces Cloudinary’s message to your UI log/alert
+      console.error('[restore] Cloudinary explicit error', res.status, text);
       return { statusCode: 502, headers: CORS, body: `Cloudinary explicit error (${res.status}): ${text}` };
     }
 
     let json; try { json = JSON.parse(text); } catch { json = {}; }
     const processed_url = json?.eager?.[0]?.secure_url || image_url;
+
     return ok({ processed_url });
 
   } catch (err) {
+    console.error('[restore] Server error', err);
     return { statusCode: 500, headers: CORS, body: `Server error: ${err.message}` };
   }
 
