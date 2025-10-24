@@ -11,6 +11,13 @@ const CLOUD_NAME = process.env.CLOUDINARY_CLOUD_NAME;
 const API_KEY    = process.env.CLOUDINARY_API_KEY;
 const API_SECRET = process.env.CLOUDINARY_API_SECRET;
 
+// 🔎 DIAGNOSTIC: shows what the function actually sees (safe, redacted)
+console.log('[env]', {
+  cloud: CLOUD_NAME,
+  keyStart: API_KEY ? API_KEY.slice(0, 4) : null,
+  keyLen: API_KEY ? API_KEY.length : 0
+});
+
 exports.handler = async (event) => {
   if (event.httpMethod === 'OPTIONS') return { statusCode: 200, headers: CORS, body: 'ok' };
   if (event.httpMethod !== 'POST')   return { statusCode: 405, headers: CORS, body: 'Method Not Allowed' };
@@ -35,8 +42,9 @@ exports.handler = async (event) => {
     ].filter(Boolean).join(',');
 
     const body = new URLSearchParams({ public_id: publicId, type: 'upload', eager: recipe });
+    const url  = `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/explicit`;
 
-    const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/explicit`, {
+    const res  = await fetch(url, {
       method: 'POST',
       headers: {
         'Authorization': buildBasicAuthHeader(API_KEY, API_SECRET),
@@ -46,7 +54,10 @@ exports.handler = async (event) => {
     });
 
     const text = await res.text();
-    if (!res.ok) return { statusCode: 502, headers: CORS, body: `Cloudinary explicit error (${res.status}): ${text}` };
+    if (!res.ok) {
+      // surfaces Cloudinary’s message to your UI log/alert
+      return { statusCode: 502, headers: CORS, body: `Cloudinary explicit error (${res.status}): ${text}` };
+    }
 
     let json; try { json = JSON.parse(text); } catch { json = {}; }
     const processed_url = json?.eager?.[0]?.secure_url || image_url;
