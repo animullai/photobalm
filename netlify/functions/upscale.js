@@ -1,52 +1,38 @@
-const { cors, postJson, pollJob, BASE, UPSCALE_PATH } = require('./_dzine');
+// netlify/functions/upscale.js
+const { CORS, postJson, pollProgress, firstResultUrl } = require('./_dzine_openapi');
 
 exports.handler = async (event) => {
-  if (event.httpMethod === 'OPTIONS') return { statusCode: 200, headers: cors(), body: 'ok' };
-  if (event.httpMethod !== 'POST')   return { statusCode: 405, headers: cors(), body: 'Method Not Allowed' };
+  if (event.httpMethod === 'OPTIONS') return { statusCode: 200, headers: CORS, body: 'ok' };
+  if (event.httpMethod !== 'POST')   return { statusCode: 405, headers: CORS, body: 'Method Not Allowed' };
 
   try {
     const { image_url, options = {} } = JSON.parse(event.body || '{}');
-    if (!image_url) return { statusCode: 400, headers: cors(), body: 'Missing image_url' };
+    if (!image_url) return bad(400, 'Missing image_url');
 
-    // scale could be 2,3,4 from the UI; pass through
-    const payload = { image_url, options };
-    const first = await postJson(UPSCALE_PATH, payload);
+    const scale = Number.parseFloat(options.scale) || 2; // 1.5, 2, 3, 4 allowed by Dzine
+    const body = {
+      upscaling_resize: scale,
+      output_format: 'jpg',
+      images: [{ url: image_url }]
+    };
 
-    const directUrl = first.json?.processed_url || first.json?.result_url || first.json?.url;
-    if (first.ok && directUrl) {
-      return ok({ processed_url: directUrl, dzine_endpoint: `${BASE}${UPSCALE_PATH}` });
-    }
+    const start = await postJson('/create_task_upscale', body);
+    if (!start.ok) return bad(start.status || 502, `Dzine upscale error: ${start.text}`);
 
-    const jobId  = first.json?.job_id || first.json?.id;
-    const jobUrl = first.json?.job_url || (jobId ? `${BASE}/v1/jobs/${jobId}` : null);
+    const taskId = start.json?.data?.task_id;
+    if (!taskId) return bad(502, `Dzine upscale: no task_id. Raw: ${start.text}`);
 
-    if (!first.ok && !jobUrl) {
-      return err(first.status, `Dzine upscale error: ${first.text}`);
-    }
-    if (!jobUrl) {
-      return err(502, `Dzine upscale: no result URL or job to poll. Raw: ${first.text}`);
-    }
+    const done = await pollProgress(taskId);
+    if (!done.ok) return bad(done.status || 502, `Dzine upscale job failed: ${done.text}`);
 
-    const polled = await pollJob(jobUrl);
-    if (!polled.ok) {
-      return err(502, `Dzine upscale job failed: ${polled.text}`);
-    }
+    const url = firstResultUrl(done.json);
+    if (!url) return bad(502, `Dzine upscale succeeded but no result URL. Raw: ${JSON.stringify(done.json)}`);
 
-    const finalUrl = polled.json?.processed_url || polled.json?.result_url || polled.json?.url;
-    if (!finalUrl) {
-      return err(502, `Dzine upscale job succeeded but no URL found. Raw: ${JSON.stringify(polled.json)}`);
-    }
-
-    return ok({ processed_url: finalUrl, dzine_job_url: jobUrl });
-
+    return ok({ processed_url: url, dzine_task_id: taskId });
   } catch (e) {
-    return err(500, `Server error: ${e.message}`);
+    return bad(500, `Server error: ${e.message}`);
   }
 
-  function ok(obj) {
-    return { statusCode: 200, headers: { ...cors(), 'Content-Type': 'application/json' }, body: JSON.stringify(obj) };
-  }
-  function err(code, message) {
-    return { statusCode: code, headers: cors(), body: message };
-  }
+  function ok(obj)  { return { statusCode: 200, headers: { ...CORS, 'Content-Type': 'application/json' }, body: JSON.stringify(obj) }; }
+  function bad(c,m) { return { statusCode: c,   headers: CORS, body: m }; }
 };
