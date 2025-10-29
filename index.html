@@ -1,161 +1,293 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Photobalm AI — Portrait Restore & Upscale</title>
-  <meta name="description" content="Upload a photo for AI portrait restoration or upscale. Secure upload to Cloudinary, then process via Netlify Functions." />
-  <style>
-    :root{
-      --ink:#0f172a;--ink-soft:#475569;--nav:#122647;--cream:#f7f3ea;--panel:#fff;--btn:#f6c10e;--btn-ink:#1f2937;--border:#e5e7eb;
-    }
-    *{box-sizing:border-box}
-    body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;color:var(--ink);background:var(--cream)}
-    header{background:var(--nav);color:#fff;padding:32px 16px;text-align:center}
-    header h1{margin:0 0 8px;font-size:32px}
-    header p{margin:0;color:#d9e1f2}
-    .wrap{max-width:980px;margin:28px auto;padding:0 16px}
-    .grid{display:grid;grid-template-columns:1fr;gap:16px}
-    @media(min-width:900px){.grid{grid-template-columns:1.2fr .8fr}}
-    .card{background:var(--panel);border:1px solid var(--border);border-radius:16px;box-shadow:0 10px 20px rgba(0,0,0,.04);overflow:hidden}
-    .tabs{display:flex;gap:8px;padding:16px;border-bottom:1px solid var(--border)}
-    .tab{appearance:none;border:1px solid var(--border);background:#fff;color:var(--ink);padding:10px 14px;border-radius:999px;cursor:pointer;font-weight:600}
-    .tab[aria-selected="true"]{background:var(--btn);border-color:var(--btn);color:var(--btn-ink)}
-    .drop{display:flex;align-items:center;justify-content:center;text-align:center;border:2px dashed #cbd5e1;border-radius:18px;background:#fafaf9;padding:28px;cursor:pointer;transition:background .2s,border-color .2s;position:relative}
-    .drop.drag{background:#eef2ff;border-color:#6366f1}
-    .drop input{display:none}
-    .muted{color:var(--ink-soft);font-size:14px}
-    .row{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}
-    .btn{appearance:none;background:var(--btn);color:var(--btn-ink);border:none;border-radius:999px;padding:12px 18px;font-weight:700;cursor:pointer;box-shadow:0 6px 16px rgba(246,193,14,.25)}
-    .btn.secondary{background:#fff;border:1px solid var(--border);box-shadow:none;color:var(--ink)}
-    .btn:disabled{opacity:.6;cursor:not-allowed}
-    .preview{display:grid;gap:10px}
-    .preview img{max-width:100%;border-radius:12px;border:1px solid var(--border)}
-    .pill{display:inline-flex;align-items:center;gap:8px;padding:6px 10px;border-radius:999px;font-size:12px;border:1px solid var(--border);background:#fff}
-    .pill.warn{background:#fffbeb;border-color:#fde68a}
-    .log{background:#0b1020;color:#d1d5db;padding:12px;border-radius:12px;font-size:12px;line-height:1.45;max-height:260px;overflow:auto}
-  </style>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Photobalm AI</title>
+<style>
+  :root{--ink:#0f172a;--ink-soft:#4b5563;--nav:#122647;--cream:#f7f3ea;--btn:#f6c10e;--border:#e5e7eb;--panel:#fff}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;color:var(--ink);background:var(--cream)}
+  header{background:var(--nav);color:#fff;padding:28px 16px;text-align:center}
+  header h1{margin:0 0 6px;font-size:34px}
+  header p{margin:0;color:#d9e1f2}
+  .wrap{max-width:980px;margin:24px auto;padding:0 16px;display:grid;grid-template-columns:1fr;gap:16px}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:16px;box-shadow:0 10px 24px rgba(15,23,42,.08);padding:18px}
+  .card h2{margin:4px 0 10px}
+  .row{display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap}
+  .col{flex:1 1 320px}
+  .drop{display:flex;align-items:center;justify-content:center;text-align:center;border:2px dashed #cbd5e1;border-radius:14px;background:#fafaf9;padding:22px;cursor:pointer}
+  .drop input{display:none}
+  label{font-weight:700;margin:10px 0 6px;display:block}
+  input[type=file],select{width:100%;padding:10px;border:1px solid var(--border);border-radius:10px;background:#fff}
+  .btn{display:inline-block;background:var(--btn);color:#222;padding:10px 16px;border-radius:10px;font-weight:800;border:none;cursor:pointer}
+  .btn:disabled{opacity:.6;cursor:not-allowed}
+  .preview{border:1px solid var(--border);border-radius:12px;overflow:hidden;min-height:220px;display:flex;align-items:center;justify-content:center;background:#fafafa;margin-top:8px}
+  .preview img{max-width:100%;height:auto;display:block}
+  .note{color:var(--ink-soft);font-size:14px;margin-top:6px}
+  .status{margin:10px 0 0;padding:10px;border:1px solid var(--border);border-radius:10px;background:#eef3ff;color:#0b53b3}
+  .err{background:#fff5f5;color:#a02020;border-color:#f6c6c6}
+  details{margin-top:10px}
+  summary{cursor:pointer;font-weight:700}
+  code,kbd{background:#f3f4f6;padding:2px 6px;border-radius:6px}
+</style>
 </head>
 <body>
   <header>
     <h1>Photobalm AI</h1>
-    <p>Portrait Restoration & Upscale — client upload → Cloudinary → Netlify Function</p>
+    <p>Restore and enhance portraits with Dzine.ai — private & secure.</p>
   </header>
-  <div class="wrap grid">
+
+  <main class="wrap">
+    <!-- RESTORE -->
     <section class="card">
-      <div class="tabs">
-        <button class="tab" id="tab-restore" aria-selected="true">Restore</button>
-        <button class="tab" id="tab-upscale" aria-selected="false">Upscale</button>
+      <h2>Portrait Restoration</h2>
+      <div class="row">
+        <div class="col">
+          <div class="drop" id="drop-restore">
+            <input type="file" id="file-restore" accept="image/*" />
+            <div><strong>Drag & drop</strong> or click to select (JPG/PNG/WebP)</div>
+          </div>
+          <label for="r-scale">Upscale while restoring</label>
+          <select id="r-scale">
+            <option value="2">2× (recommended)</option>
+            <option value="1.5">1.5×</option>
+            <option value="3">3×</option>
+            <option value="4">4×</option>
+          </select>
+          <button class="btn" id="run-restore" style="margin-top:10px">Run Restore</button>
+          <div id="status-restore" class="status" style="display:none"></div>
+        </div>
+        <div class="col">
+          <div class="preview" id="input-restore">No image</div>
+          <div class="preview" id="output-restore" style="margin-top:10px">Result shows here</div>
+        </div>
       </div>
-
-      <div id="panel-restore">
-        <h2>Upload a photo to Restore</h2>
-        <div class="drop" id="drop-restore">
-          <input type="file" id="file-restore" accept="image/*">
-          <div>
-            <strong>Drag & drop</strong> an image here, or <u>click to select</u> (JPEG/PNG/WebP).
-            <div class="muted" style="margin-top:6px">Your image uploads directly to Cloudinary over HTTPS. We then send the URL to our restore function.</div>
-          </div>
-        </div>
-        <div class="row">
-          <label class="pill"><input type="checkbox" id="colorize" /> Colorize if B/W</label>
-          <label class="pill"><input type="checkbox" id="enhanceFaces" checked /> Enhance faces</label>
-        </div>
-        <div class="row">
-          <button class="btn" id="run-restore" disabled>Run Restore</button>
-          <button class="btn secondary" id="reset-restore" disabled>Reset</button>
-          <span id="status-restore" class="pill warn" style="display:none">Working…</span>
-        </div>
-        <div class="row" style="margin-top:16px">
-          <div class="preview" style="flex:1 1 320px">
-            <div class="muted">Input</div>
-            <img id="input-restore" alt="Input preview" />
-          </div>
-          <div class="preview" style="flex:1 1 320px">
-            <div class="muted">Result</div>
-            <img id="output-restore" alt="Output preview" />
-          </div>
-        </div>
-        <details style="margin-top:16px">
-          <summary>Request / Response log</summary>
-          <pre class="log" id="log-restore"></pre>
-        </details>
-      </div>
-
-      <div id="panel-upscale" hidden>
-        <h2>Upload a photo to Upscale</h2>
-        <div class="drop" id="drop-upscale">
-          <input type="file" id="file-upscale" accept="image/*">
-          <div>
-            <strong>Drag & drop</strong> an image here, or <u>click to select</u>.
-            <div class="muted" style="margin-top:6px">Secure client upload → Cloudinary → URL to our upscale function.</div>
-          </div>
-        </div>
-        <div class="row">
-          <label class="pill">Scale
-            <select id="scale" style="margin-left:8px;border:1px solid var(--border);border-radius:8px;padding:6px 8px">
-              <option value="2">2×</option>
-              <option value="3">3×</option>
-              <option value="4" selected>4×</option>
-            </select>
-          </label>
-        </div>
-        <div class="row">
-          <button class="btn" id="run-upscale" disabled>Run Upscale</button>
-          <button class="btn secondary" id="reset-upscale" disabled>Reset</button>
-          <span id="status-upscale" class="pill warn" style="display:none">Working…</span>
-        </div>
-        <div class="row" style="margin-top:16px">
-          <div class="preview" style="flex:1 1 320px">
-            <div class="muted">Input</div>
-            <img id="input-upscale" alt="Input preview" />
-          </div>
-          <div class="preview" style="flex:1 1 320px">
-            <div class="muted">Result</div>
-            <img id="output-upscale" alt="Output preview" />
-          </div>
-        </div>
-        <details style="margin-top:16px">
-          <summary>Request / Response log</summary>
-          <pre class="log" id="log-upscale"></pre>
-        </details>
-      </div>
+      <details>
+        <summary>Request / Response log</summary>
+        <pre id="log-restore" style="white-space:pre-wrap;font-size:12px"></pre>
+      </details>
     </section>
 
-    <aside class="card">
-      <h2 style="padding:18px 18px 0">System</h2>
-      <div class="content" style="padding:18px">
-        <p><b>Cloudinary:</b> drqxthmef</p>
-        <p class="muted">Unsigned preset: photobalm-upload</p>
-        <p><b>Functions:</b><br>/.netlify/functions/restore<br>/.netlify/functions/upscale</p>
-        <p><b>Auth:</b> Not required (unsigned client upload)</p>
-        <div class="pill" style="background:#ecfdf5;border-color:#bbf7d0">Cloudinary ready</div>
-        <div class="pill" style="background:#ecfdf5;border-color:#bbf7d0">Functions wired</div>
+    <!-- UPSCALE -->
+    <section class="card">
+      <h2>Upscale</h2>
+      <div class="row">
+        <div class="col">
+          <div class="drop" id="drop-upscale">
+            <input type="file" id="file-upscale" accept="image/*" />
+            <div><strong>Drag & drop</strong> or click to select</div>
+          </div>
+          <label for="u-scale">Scale</label>
+          <select id="u-scale">
+            <option value="2">2×</option>
+            <option value="3">3×</option>
+            <option value="4">4×</option>
+          </select>
+          <button class="btn" id="run-upscale" style="margin-top:10px">Run Upscale</button>
+          <div id="status-upscale" class="status" style="display:none"></div>
+        </div>
+        <div class="col">
+          <div class="preview" id="input-upscale">No image</div>
+          <div class="preview" id="output-upscale" style="margin-top:10px">Result shows here</div>
+        </div>
       </div>
-    </aside>
-  </div>
+      <details>
+        <summary>Request / Response log</summary>
+        <pre id="log-upscale" style="white-space:pre-wrap;font-size:12px"></pre>
+      </details>
+    </section>
 
-  <script>
-    const CLOUDINARY_CLOUD_NAME='drqxthmef';
-    const CLOUDINARY_UPLOAD_PRESET='photobalm-upload';
-    const ENDPOINT_RESTORE='/.netlify/functions/restore';
-    const ENDPOINT_UPSCALE='/.netlify/functions/upscale';
-    const $=s=>document.querySelector(s);
-    const on=(e,t,f)=>e.addEventListener(t,f);
-    const log=(el,...a)=>{el.textContent+=a.map(x=>typeof x==='string'?x:JSON.stringify(x,null,2)).join(' ')+'\n';el.scrollTop=el.scrollHeight};
-    function setBusy(k,b){const r=k==='restore'?$('#run-restore'):$('#run-upscale');const s=k==='restore'?$('#status-restore'):$('#status-upscale');r.disabled=b;s.style.display=b?'inline-flex':'none';}
-    function wireDrop(z,i,onFile){const e=e=>e.preventDefault();on(z,'dragenter',e);on(z,'dragover',e);on(z,'dragleave',e);on(z,'drop',ev=>{ev.preventDefault();const f=ev.dataTransfer.files?.[0];if(f)onFile(f);});on(z,'click',()=>i.click());on(i,'change',()=>{const f=i.files?.[0];if(f)onFile(f);});}
-    async function uploadToCloudinary(f,l){const u=`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/auto/upload`;const form=new FormData();form.append('file',f);form.append('upload_preset',CLOUDINARY_UPLOAD_PRESET);log(l,'→ Uploading to Cloudinary…');const r=await fetch(u,{method:'POST',body:form});if(!r.ok)throw new Error(await r.text());const j=await r.json();log(l,'✓ Uploaded',j.secure_url);return j.secure_url;}
-    async function postJSON(ep,body,l){log(l,'→ POST',ep,body);const r=await fetch(ep,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});if(r.status===405)throw new Error('Function returned 405 Method Not Allowed');const t=await r.text();let j;try{j=JSON.parse(t);}catch{j={raw:t}}if(!r.ok)throw new Error(t);log(l,'✓ Response',j);return j;}
-    on($('#tab-restore'),'click',()=>{$('#panel-restore').hidden=false;$('#panel-upscale').hidden=true;$('#tab-restore').setAttribute('aria-selected','true');$('#tab-upscale').setAttribute('aria-selected','false');});
-    on($('#tab-upscale'),'click',()=>{$('#panel-restore').hidden=true;$('#panel-upscale').hidden=false;$('#tab-restore').setAttribute('aria-selected','false');$('#tab-upscale').setAttribute('aria-selected','true');});
-    let rf=null,rurl=null,uf=null,uurl=null;const lr=$('#log-restore'),lu=$('#log-upscale');
-    wireDrop($('#drop-restore'),$('#file-restore'),f=>{rf=f;rurl=null;$('#input-restore').src=URL.createObjectURL(f);$('#run-restore').disabled=false;$('#reset-restore').disabled=false;$('#output-restore').removeAttribute('src');lr.textContent='';});
-    on($('#reset-restore'),'click',()=>{rf=null;rurl=null;$('#input-restore').removeAttribute('src');$('#output-restore').removeAttribute('src');$('#run-restore').disabled=true;$('#reset-restore').disabled=true;lr.textContent='';});
-    on($('#run-restore'),'click',async()=>{if(!rf)return;setBusy('restore',true);try{const url=rurl||await uploadToCloudinary(rf,lr);rurl=url;const b={image_url:url,options:{colorize:$('#colorize').checked,enhanceFaces:$('#enhanceFaces').checked}};const r=await postJSON(ENDPOINT_RESTORE,b,lr);const out=r.processed_url||r.result_url||r.url;if(out)$('#output-restore').src=out;else log(lr,'No output URL');}catch(e){log(lr,'✗',String(e));alert('Restore failed: '+e.message);}finally{setBusy('restore',false);}});
-    wireDrop($('#drop-upscale'),$('#file-upscale'),f=>{uf=f;uurl=null;$('#input-upscale').src=URL.createObjectURL(f);$('#run-upscale').disabled=false;$('#reset-upscale').disabled=false;$('#output-upscale').removeAttribute('src');lu.textContent='';});
-    on($('#reset-upscale'),'click',()=>{uf=null;uurl=null;$('#input-upscale').removeAttribute('src');$('#output-upscale').removeAttribute('src');$('#run-upscale').disabled=true;$('#reset-upscale').disabled=true;lu.textContent='';});
-    on($('#run-upscale'),'click',async()=>{if(!uf)return;setBusy('upscale',true);try{const url=uurl||await uploadToCloudinary(uf,lu);uurl=url;const b={image_url:url,options:{scale:parseInt($('#scale').value,10)}};const r=await postJSON(ENDPOINT_UPSCALE,b,lu);const out=r.processed_url||r.result_url||r.url;if(out)$('#output-upscale').src=out;else log(lu,'No output URL');}catch(e){log(lu,'✗',String(e));alert('Upscale failed: '+e.message);}finally{setBusy('upscale',false);}});
-  </script>
+    <section class="card">
+      <h3>Auth & Endpoints</h3>
+      <div class="note">
+        Cloudinary preset: <kbd>photobalm-upload</kbd><br>
+        Functions: <code>/.netlify/functions/restore</code>, <code>/.netlify/functions/upscale</code><br>
+        (Your Dzine API key stays private on Netlify)
+      </div>
+    </section>
+  </main>
+
+<script>
+/* ---------- SETTINGS (change only if your Cloud name/preset differ) ---------- */
+const CLOUDINARY_CLOUD_NAME = 'drqxthmef';
+const CLOUDINARY_UPLOAD_PRESET = 'photobalm-upload';
+
+/* ---------- HELPERS ---------- */
+const $ = (id) => document.getElementById(id);
+
+function logLine(preEl, ...parts){
+  const t = parts.map(x => typeof x === 'string' ? x : JSON.stringify(x, null, 2)).join(' ');
+  preEl.textContent += (preEl.textContent ? '\n' : '') + t;
+}
+
+function setStatus(el, msg, isErr=false){
+  el.textContent = msg;
+  el.style.display = 'block';
+  el.className = 'status' + (isErr ? ' err' : '');
+}
+
+function previewFile(input, previewEl){
+  previewEl.innerHTML = 'No image';
+  const f = input.files && input.files[0] ? input.files[0] : null;
+  if(!f) return null;
+  const url = URL.createObjectURL(f);
+  const img = new Image();
+  img.onload = () => URL.revokeObjectURL(url);
+  img.src = url;
+  previewEl.innerHTML = '';
+  previewEl.appendChild(img);
+  return f;
+}
+
+async function uploadToCloudinary(file){
+  const url = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/auto/upload`;
+  const form = new FormData();
+  form.append('file', file);
+  form.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
+  const res = await fetch(url, { method:'POST', body: form });
+  if(!res.ok) throw new Error(await res.text());
+  return res.json(); // { secure_url, ... }
+}
+
+/* ---------- POLLING-AWARE CALLERS (THIS IS THE PART YOU NEEDED) ---------- */
+async function callRestore(imageUrl, opts, logEl, statusEl){
+  // Start the job
+  logLine(logEl, 'POST /restore', { image_url: imageUrl, options: opts });
+  let res = await fetch('/.netlify/functions/restore', {
+    method:'POST',
+    headers:{ 'Content-Type':'application/json' },
+    body: JSON.stringify({ image_url: imageUrl, options: opts })
+  });
+
+  // If function returned final result directly
+  if(res.ok && res.headers.get('Content-Type')?.includes('application/json')){
+    const j = await res.json();
+    if(j.processed_url){
+      logLine(logEl, '✓ Result ready (direct)');
+      return j.processed_url;
+    }
+  }
+
+  // If async: 202 with task_id → poll GET ?task_id=...
+  if(res.status === 202){
+    const j = await res.json();
+    const taskId = j.task_id;
+    logLine(logEl, 'Accepted, task_id:', taskId);
+    setStatus(statusEl, 'Processing… (this can take a bit)');
+
+    const started = Date.now();
+    while(Date.now() - started < 180000){ // poll up to 3 minutes
+      await new Promise(r => setTimeout(r, 1500));
+      const s = await fetch(`/.netlify/functions/restore?task_id=${encodeURIComponent(taskId)}`);
+      const sj = await s.json().catch(()=> ({}));
+      logLine(logEl, 'GET status', sj);
+      if(s.ok && sj.processed_url){
+        logLine(logEl, '✓ Result ready (polled)');
+        return sj.processed_url;
+      }
+      // otherwise keep polling
+    }
+    throw new Error('Restore still running (timeout).');
+  }
+
+  // Hard error text
+  throw new Error(await res.text());
+}
+
+async function callUpscale(imageUrl, opts, logEl, statusEl){
+  logLine(logEl, 'POST /upscale', { image_url: imageUrl, options: opts });
+  let res = await fetch('/.netlify/functions/upscale', {
+    method:'POST',
+    headers:{ 'Content-Type':'application/json' },
+    body: JSON.stringify({ image_url: imageUrl, options: opts })
+  });
+
+  if(res.ok && res.headers.get('Content-Type')?.includes('application/json')){
+    const j = await res.json();
+    if(j.processed_url){
+      logLine(logEl, '✓ Result ready (direct)');
+      return j.processed_url;
+    }
+  }
+
+  if(res.status === 202){
+    const j = await res.json();
+    const taskId = j.task_id;
+    logLine(logEl, 'Accepted, task_id:', taskId);
+    setStatus(statusEl, 'Processing…');
+
+    const started = Date.now();
+    while(Date.now() - started < 180000){
+      await new Promise(r => setTimeout(r, 1500));
+      const s = await fetch(`/.netlify/functions/upscale?task_id=${encodeURIComponent(taskId)}`);
+      const sj = await s.json().catch(()=> ({}));
+      logLine(logEl, 'GET status', sj);
+      if(s.ok && sj.processed_url){
+        logLine(logEl, '✓ Result ready (polled)');
+        return sj.processed_url;
+      }
+    }
+    throw new Error('Upscale still running (timeout).');
+  }
+
+  throw new Error(await res.text());
+}
+
+/* ---------- WIRE UI ---------- */
+function wireTool(prefix){
+  const drop = $(`drop-${prefix}`);
+  const input = $(`file-${prefix}`);
+  const runBtn = $(`run-${prefix}`);
+  const inpPrev = $(`input-${prefix}`);
+  const outPrev = $(`output-${prefix}`);
+  const statusEl = $(`status-${prefix}`);
+  const logEl = $(`log-${prefix}`);
+
+  // clicking the drop area opens file chooser
+  drop.addEventListener('click', () => input.click());
+  input.addEventListener('change', () => previewFile(input, inpPrev));
+
+  runBtn.addEventListener('click', async () => {
+    try{
+      logEl.textContent = '';
+      setStatus(statusEl, 'Uploading to Cloudinary…');
+      runBtn.disabled = true;
+
+      const file = previewFile(input, inpPrev);
+      if(!file){ setStatus(statusEl, 'Choose an image first.', true); runBtn.disabled = false; return; }
+
+      // 1) Upload to Cloudinary
+      const up = await uploadToCloudinary(file);
+      const imageUrl = up.secure_url;
+      logLine(logEl, 'Cloudinary URL', imageUrl);
+      setStatus(statusEl, 'Starting job…');
+
+      // 2) Call function (with polling)
+      let resultUrl;
+      if(prefix === 'restore'){
+        const scaleSel = $('r-scale'); const upscale = Number(scaleSel.value);
+        resultUrl = await callRestore(imageUrl, { upscale }, logEl, statusEl);
+      } else {
+        const scaleSel = $('u-scale'); const scale = Number(scaleSel.value);
+        resultUrl = await callUpscale(imageUrl, { scale }, logEl, statusEl);
+      }
+
+      // 3) Show result
+      outPrev.innerHTML = `<img alt="Result" src="${resultUrl}">`;
+      setStatus(statusEl, 'Done!');
+    }catch(e){
+      console.error(e);
+      setStatus(statusEl, String(e.message || e), true);
+      alert((prefix === 'restore' ? 'Restore' : 'Upscale') + ' failed: ' + (e.message || e));
+    }finally{
+      runBtn.disabled = false;
+    }
+  });
+}
+
+wireTool('restore');
+wireTool('upscale');
+</script>
 </body>
 </html>
