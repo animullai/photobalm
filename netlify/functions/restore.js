@@ -1,58 +1,114 @@
 // netlify/functions/restore.js
-// Restore via Dzine Img2Img (neutral "No Style" if available)
-// Input:  { image_url, options? }
-// Output: { processed_url }
+// Calls Dzine "create_task_upscale" as a gentle restore/enhance,
+// then polls "get_task_progress/{task_id}" for the result.
+//
+// Auth per Dzine docs: Authorization: {API_KEY}  (no Bearer)
+// Base per docs: https://papi.dzine.ai/openapi/v1/...  (note "papi").
+// Poll up to ~25s to fit Netlify 30s limit.
 
-const { CORS, getJson, postJson, ensureOkDzine, pollProgress, firstResultUrl } = require('./_dzine_openapi');
+const DZINE_BASE = 'https://papi.dzine.ai/openapi/v1';
+const API_KEY = process.env.DZINE_API_KEY;
 
-exports.handler = async (event) => {
-  if (event.httpMethod === 'OPTIONS') return { statusCode: 200, headers: CORS, body: 'ok' };
-  if (event.httpMethod !== 'POST')   return { statusCode: 405, headers: CORS, body: 'Method Not Allowed' };
+function cors() {
+  return {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Headers': 'content-type,authorization',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  };
+}
 
+async function postJson(path, body, timeoutMs = 25000) {
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
-    const { image_url, options = {} } = JSON.parse(event.body || '{}');
-    if (!image_url) return bad(400, 'Missing image_url');
+    const res = await fetch(`${DZINE_BASE}${path}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        // Dzine expects the API key directly in Authorization header:
+        // Authorization: {API_KEY}
+        // (not "Bearer <key>")
+        'Authorization': API_KEY,
+      },
+      body: JSON.stringify(body),
+      signal: ctrl.signal,
+    });
+    const text = await res.text();
+    let json; try { json = JSON.parse(text); } catch { json = { raw: text }; }
+    return { ok: res.ok, status: res.status, json, text };
+  } finally {
+    clearTimeout(t);
+  }
+}
 
-    // 1) Load styles → prefer "No Style" to keep look neutral
-    const stylesRaw = await getJson('/style/list');
-    const stylesCheck = ensureOkDzine(stylesRaw, 'Style list');
-    if (!stylesCheck.ok) return bad(stylesRaw.status || 502, stylesCheck.message);
-    const list = stylesRaw.json?.data?.list || [];
-    const noStyle = list.find(s => /no\s*style/i.test(s?.name || '')) || list[0];
-    if (!noStyle?.style_code) return bad(502, 'Could not resolve Dzine style_code');
+async function pollProgress(taskId, timeoutMs = 25000, intervalMs = 1200) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const url = `${DZINE_BASE}/get_task_progress/${encodeURIComponent(taskId)}`;
+    const res = await fetch(url, { headers: { 'Authorization': API_KEY } });
+    const text = await res.text();
+    let json; try { json = JSON.parse(text); } catch { json = { raw: text }; }
 
-    // 2) Start img2img task
+    // Dzine returns: { code, msg, data: { status, generate_result_slots: [...] } }
+    const status = json?.data?.status;
+    if (status === 'succeeded' || status === 'success' || status === 'completed' || status === 'done') {
+      // First non-empty slot is the image URL
+      const slots = json?.data?.generate_result_slots || [];
+      const first = Array.isArray(slots) ? slots.find(Boolean) : null;
+      return { ok: true, url: first || null, raw: json };
+    }
+    if (status === 'failed' || status === 'error') {
+      return { ok: false, error: `Dzine job failed: ${text}` };
+    }
+    await new Promise(r => setTimeout(r, intervalMs));
+  }
+  return { ok: false, error: 'Dzine polling timed out' };
+}
+
+export default async (req) => {
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { status: 200, headers: cors() });
+  }
+  if (req.method !== 'POST') {
+    return new Response('Method Not Allowed', { status: 405, headers: cors() });
+  }
+  try {
+    const { image_url, options = {} } = await req.json();
+    if (!API_KEY) return new Response('Missing DZINE_API_KEY', { status: 500, headers: cors() });
+    if (!image_url) return new Response('Missing image_url', { status: 400, headers: cors() });
+
+    // Use Dzine Upscale as a visible "restore" (2x by default, jpg output)
+    const upFactor = Number(options.upscale) || 2; // 1.5, 2, 3, 4 allowed
     const body = {
-      prompt: options.prompt || 'Photo enhancement',
-      style_code: noStyle.style_code,
-      style_intensity: 0,         // neutral
-      structure_match: 0.9,       // preserve content
-      quality_mode: 1,            // high quality
-      color_match: 1,             // preserve tones
-      generate_slots: [1,0,0,0],  // one output
-      images: [{ url: image_url }],
-      output_format: 'webp'
+      upscaling_resize: upFactor,
+      output_format: 'jpg',
+      images: [{ url: image_url }], // Dzine supports URL images directly
     };
 
-    const startRaw = await postJson('/create_task_img2img', body);
-    const startCheck = ensureOkDzine(startRaw, 'Img2Img create');
-    if (!startCheck.ok) return bad(startRaw.status || 502, startCheck.message);
+    // 1) Create task
+    const first = await postJson('/create_task_upscale', body, 12000);  // quick call
+    if (!first.ok) {
+      return new Response(`Dzine restore error (${first.status}): ${first.text}`, { status: 502, headers: cors() });
+    }
+    const taskId = first?.json?.data?.task_id;
+    if (!taskId) {
+      return new Response(`Dzine restore: no task_id. Raw: ${first.text}`, { status: 502, headers: cors() });
+    }
 
-    const taskId = startRaw.json?.data?.task_id;
-    if (!taskId) return bad(502, `Img2Img create: no task_id (raw: ${startRaw.text || 'empty'})`);
+    // 2) Poll progress until done (≤ ~25s)
+    const polled = await pollProgress(taskId, 25000, 1200);
+    if (!polled.ok || !polled.url) {
+      const msg = polled.error || 'No URL in Dzine result';
+      return new Response(`Dzine restore job error: ${msg}`, { status: 502, headers: cors() });
+    }
 
-    // 3) Poll to completion (up to ~3 min)
-    const done = await pollProgress(taskId, { label: 'Img2Img progress' });
-    if (!done.ok) return bad(done.status || 502, done.message);
-
-    const url = firstResultUrl(done.json);
-    if (!url) return bad(502, `Img2Img succeeded but no result URL (raw: ${JSON.stringify(done.json)})`);
-
-    return ok({ processed_url: url, dzine_task_id: taskId });
-  } catch (e) {
-    return bad(500, `Server error: ${e.message}`);
+    // Success
+    return new Response(JSON.stringify({ processed_url: polled.url, dzine_task_id: taskId }), {
+      status: 200,
+      headers: { ...cors(), 'Content-Type': 'application/json' },
+    });
+  } catch (err) {
+    const msg = err?.name === 'AbortError' ? 'Dzine request timed out' : err.message;
+    return new Response(`Server error: ${msg}`, { status: 500, headers: cors() });
   }
-
-  function ok(obj)  { return { statusCode: 200, headers: { ...CORS, 'Content-Type': 'application/json' }, body: JSON.stringify(obj) }; }
-  function bad(c,m) { return { statusCode: c,   headers: CORS, body: m }; }
 };
