@@ -109,7 +109,7 @@
   </main>
 
 <script>
-/* ---------- SETTINGS (change only if your Cloud name/preset differ) ---------- */
+/* ---------- SETTINGS ---------- */
 const CLOUDINARY_CLOUD_NAME = 'drqxthmef';
 const CLOUDINARY_UPLOAD_PRESET = 'photobalm-upload';
 
@@ -150,85 +150,68 @@ async function uploadToCloudinary(file){
   return res.json(); // { secure_url, ... }
 }
 
-/* ---------- POLLING-AWARE CALLERS (THIS IS THE PART YOU NEEDED) ---------- */
+/* ---------- POLLING-AWARE CALLERS (fixed: no double-read) ---------- */
 async function callRestore(imageUrl, opts, logEl, statusEl){
-  // Start the job
   logLine(logEl, 'POST /restore', { image_url: imageUrl, options: opts });
-  let res = await fetch('/.netlify/functions/restore', {
+  const res = await fetch('/.netlify/functions/restore', {
     method:'POST',
     headers:{ 'Content-Type':'application/json' },
     body: JSON.stringify({ image_url: imageUrl, options: opts })
   });
 
-  // If function returned final result directly
-  if(res.ok && res.headers.get('Content-Type')?.includes('application/json')){
-    const j = await res.json();
-    if(j.processed_url){
-      logLine(logEl, '✓ Result ready (direct)');
-      return j.processed_url;
-    }
-  }
-
-  // If async: 202 with task_id → poll GET ?task_id=...
-  if(res.status === 202){
-    const j = await res.json();
-    const taskId = j.task_id;
-    logLine(logEl, 'Accepted, task_id:', taskId);
+  // Handle 202 first (so we don't read the same body twice)
+  if (res.status === 202) {
+    const { task_id } = await res.json();
+    logLine(logEl, 'Accepted, task_id:', task_id);
     setStatus(statusEl, 'Processing… (this can take a bit)');
-
     const started = Date.now();
-    while(Date.now() - started < 180000){ // poll up to 3 minutes
+    while (Date.now() - started < 180000) { // up to 3 minutes
       await new Promise(r => setTimeout(r, 1500));
-      const s = await fetch(`/.netlify/functions/restore?task_id=${encodeURIComponent(taskId)}`);
+      const s = await fetch(`/.netlify/functions/restore?task_id=${encodeURIComponent(task_id)}`);
       const sj = await s.json().catch(()=> ({}));
       logLine(logEl, 'GET status', sj);
-      if(s.ok && sj.processed_url){
-        logLine(logEl, '✓ Result ready (polled)');
-        return sj.processed_url;
-      }
-      // otherwise keep polling
+      if (s.ok && sj.processed_url) return sj.processed_url;
+      // else keep polling
     }
     throw new Error('Restore still running (timeout).');
   }
 
-  // Hard error text
+  // Non-202: direct JSON success
+  if (res.ok && res.headers.get('Content-Type')?.includes('application/json')) {
+    const j = await res.json();
+    if (j.processed_url) return j.processed_url;
+  }
+
+  // Hard error
   throw new Error(await res.text());
 }
 
 async function callUpscale(imageUrl, opts, logEl, statusEl){
   logLine(logEl, 'POST /upscale', { image_url: imageUrl, options: opts });
-  let res = await fetch('/.netlify/functions/upscale', {
+  const res = await fetch('/.netlify/functions/upscale', {
     method:'POST',
     headers:{ 'Content-Type':'application/json' },
     body: JSON.stringify({ image_url: imageUrl, options: opts })
   });
 
-  if(res.ok && res.headers.get('Content-Type')?.includes('application/json')){
-    const j = await res.json();
-    if(j.processed_url){
-      logLine(logEl, '✓ Result ready (direct)');
-      return j.processed_url;
-    }
-  }
-
-  if(res.status === 202){
-    const j = await res.json();
-    const taskId = j.task_id;
-    logLine(logEl, 'Accepted, task_id:', taskId);
+  if (res.status === 202) {
+    const { task_id } = await res.json();
+    logLine(logEl, 'Accepted, task_id:', task_id);
     setStatus(statusEl, 'Processing…');
-
     const started = Date.now();
-    while(Date.now() - started < 180000){
+    while (Date.now() - started < 180000) {
       await new Promise(r => setTimeout(r, 1500));
-      const s = await fetch(`/.netlify/functions/upscale?task_id=${encodeURIComponent(taskId)}`);
+      const s = await fetch(`/.netlify/functions/upscale?task_id=${encodeURIComponent(task_id)}`);
       const sj = await s.json().catch(()=> ({}));
       logLine(logEl, 'GET status', sj);
-      if(s.ok && sj.processed_url){
-        logLine(logEl, '✓ Result ready (polled)');
-        return sj.processed_url;
-      }
+      if (s.ok && sj.processed_url) return sj.processed_url;
     }
     throw new Error('Upscale still running (timeout).');
+  }
+
+  if (res.ok && res.headers.get('Content-Type')?.includes('application/json')) {
+    const j = await res.json();
+    if (j.processed_url) return j.processed_url;
   }
 
   throw new Error(await res.text());
@@ -244,7 +227,6 @@ function wireTool(prefix){
   const statusEl = $(`status-${prefix}`);
   const logEl = $(`log-${prefix}`);
 
-  // clicking the drop area opens file chooser
   drop.addEventListener('click', () => input.click());
   input.addEventListener('change', () => previewFile(input, inpPrev));
 
