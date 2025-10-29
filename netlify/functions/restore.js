@@ -1,4 +1,7 @@
 // netlify/functions/restore.js
+// Uses Dzine Img2Img with a neutral "No Style" to enhance the photo.
+// Contract: accepts { image_url, options? } and returns { processed_url }
+
 const { CORS, getJson, postJson, pollProgress, firstResultUrl } = require('./_dzine_openapi');
 
 exports.handler = async (event) => {
@@ -9,35 +12,38 @@ exports.handler = async (event) => {
     const { image_url, options = {} } = JSON.parse(event.body || '{}');
     if (!image_url) return bad(400, 'Missing image_url');
 
-    // 1) Fetch style list and pick a "No Style" variant (safe, neutral)
+    // 1) Load styles, prefer "No Style", else first
     const styles = await getJson('/style/list');
     if (!styles.ok) return bad(502, `Dzine style list error: ${styles.text}`);
     const list = styles.json?.data?.list || [];
-    // Prefer names that include "No Style"; otherwise use first available
     const noStyle = list.find(s => /no\s*style/i.test(s?.name || '')) || list[0];
-    if (!noStyle?.style_code) return bad(502, 'Could not resolve a style_code from Dzine styles.');
+    if (!noStyle?.style_code) return bad(502, 'Could not resolve Dzine style_code');
 
-    // 2) Request img2img task
+    // 2) Create img2img task
     const body = {
       prompt: options.prompt || 'Photo enhancement',
       style_code: noStyle.style_code,
-      style_intensity: 0,             // neutral
-      structure_match: 0.9,           // preserve content
-      quality_mode: 1,                // high quality
-      color_match: 1,                 // keep original tones
-      generate_slots: [1,0,0,0],      // 1 output
+      style_intensity: 0,         // neutral
+      structure_match: 0.9,       // preserve structure
+      quality_mode: 1,            // high quality
+      color_match: 1,             // keep original tones
+      generate_slots: [1,0,0,0],  // one output
       images: [{ url: image_url }],
       output_format: 'webp'
     };
+
     const start = await postJson('/create_task_img2img', body);
     if (!start.ok) return bad(start.status || 502, `Dzine img2img error: ${start.text}`);
 
     const taskId = start.json?.data?.task_id;
     if (!taskId) return bad(502, `Dzine img2img: no task_id. Raw: ${start.text}`);
 
-    // 3) Poll progress to completion
+    // 3) Poll to completion (up to ~3 min)
     const done = await pollProgress(taskId);
-    if (!done.ok) return bad(done.status || 502, `Dzine img2img job failed: ${done.text}`);
+    if (!done.ok) {
+      const dzineMsg = done?.json?.error?.message || done.text || 'unknown';
+      return bad(done.status || 502, `Dzine img2img job failed: ${dzineMsg}`);
+    }
 
     const url = firstResultUrl(done.json);
     if (!url) return bad(502, `Dzine img2img succeeded but no result URL. Raw: ${JSON.stringify(done.json)}`);
