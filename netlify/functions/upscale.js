@@ -1,8 +1,17 @@
-// netlify/functions/upscale.js
-// Same async pattern as restore.js, but exposes scale directly.
+// netlify/functions/restore.js
+// Async Dzine flow using IMG2IMG (better restoration than plain upscale).
+// POST starts job (202 + task_id). GET ?task_id= polls until done.
+//
+// Docs endpoints referenced:
+//   - POST /openapi/v1/create_task_img2img
+//   - GET  /openapi/v1/get_task_progress/{task_id}
 
 const DZINE_BASE = 'https://papi.dzine.ai/openapi/v1';
 const API_KEY = process.env.DZINE_API_KEY;
+
+// Neutral, photoreal style (from Dzine style list examples):
+// You can later fetch and pick other styles via /style/list.
+const DEFAULT_STYLE_CODE = 'Style-7feccf2b-f2ad-43a6-89cb-354fb5d928d2'; // "No Style v2"  
 
 function cors() {
   return {
@@ -57,7 +66,7 @@ async function dzineProgress(taskId) {
 export default async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { status: 200, headers: cors() });
 
-  // GET status
+  // GET: poll status
   const u = new URL(req.url);
   const taskIdParam = u.searchParams.get('task_id');
   if (req.method === 'GET' && taskIdParam) {
@@ -79,18 +88,29 @@ export default async (req) => {
     }
   }
 
-  // POST start
+  // POST: start IMG2IMG task
   if (req.method !== 'POST') return new Response('Method Not Allowed', { status: 405, headers: cors() });
   try {
     if (!API_KEY) return new Response('Missing DZINE_API_KEY', { status: 500, headers: cors() });
 
-    const { image_url, options = {} } = await req.json();
+    const { image_url } = await req.json();
     if (!image_url) return new Response('Missing image_url', { status: 400, headers: cors() });
 
-    const scale = Number(options.scale) || 2;
-    const body = { upscaling_resize: scale, output_format: 'jpg', images: [{ url: image_url }] };
+    // IMG2IMG: favor faithful restoration with high quality.
+    // (Prompts are required by Dzine; keep it neutral.)
+    const body = {
+      prompt: "Photo restoration: reduce noise, repair defects, keep natural skin textures; preserve original look.",
+      style_code: DEFAULT_STYLE_CODE,
+      style_intensity: 0,        // neutral
+      structure_match: 0.6,      // preserve structure but allow cleanup
+      color_match: 1,            // keep original tonality
+      quality_mode: 1,           // high quality
+      generate_slots: [1,0,0,0], // single output
+      output_format: "jpg",
+      images: [ { url: image_url } ]
+    };
 
-    const first = await dzinePost('/create_task_upscale', body);
+    const first = await dzinePost('/create_task_img2img', body);  // 
     if (!first.ok) {
       return new Response(`Dzine create error (${first.status}): ${first.text}`, { status: 502, headers: cors() });
     }
