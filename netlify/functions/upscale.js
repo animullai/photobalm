@@ -1,4 +1,6 @@
 // netlify/functions/upscale.js
+// Uses Dzine Upscale. Contract: { image_url, options:{ scale } } -> { processed_url }
+
 const { CORS, postJson, pollProgress, firstResultUrl } = require('./_dzine_openapi');
 
 exports.handler = async (event) => {
@@ -9,7 +11,7 @@ exports.handler = async (event) => {
     const { image_url, options = {} } = JSON.parse(event.body || '{}');
     if (!image_url) return bad(400, 'Missing image_url');
 
-    const scale = Number.parseFloat(options.scale) || 2; // 1.5, 2, 3, 4 allowed by Dzine
+    const scale = Number.parseFloat(options.scale) || 2; // Dzine allows 1.5, 2, 3, 4
     const body = {
       upscaling_resize: scale,
       output_format: 'jpg',
@@ -23,7 +25,10 @@ exports.handler = async (event) => {
     if (!taskId) return bad(502, `Dzine upscale: no task_id. Raw: ${start.text}`);
 
     const done = await pollProgress(taskId);
-    if (!done.ok) return bad(done.status || 502, `Dzine upscale job failed: ${done.text}`);
+    if (!done.ok) {
+      const dzineMsg = done?.json?.error?.message || done.text || 'unknown';
+      return bad(done.status || 502, `Dzine upscale job failed: ${dzineMsg}`);
+    }
 
     const url = firstResultUrl(done.json);
     if (!url) return bad(502, `Dzine upscale succeeded but no result URL. Raw: ${JSON.stringify(done.json)}`);
