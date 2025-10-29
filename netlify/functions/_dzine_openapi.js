@@ -1,4 +1,6 @@
 // netlify/functions/_dzine_openapi.js
+// Dzine OpenAPI helper: GET/POST + progress polling
+
 const BASE = 'https://papi.dzine.ai/openapi/v1';
 
 const CORS = {
@@ -10,12 +12,14 @@ const CORS = {
 function authHeader() {
   const key = process.env.DZINE_API_KEY;
   if (!key) throw new Error('Missing DZINE_API_KEY');
-  // Dzine wants Authorization: {API_KEY}  (no "Bearer")
+  // Dzine expects: Authorization: {API_KEY}  (no "Bearer")
   return { Authorization: key };
 }
 
 async function getJson(path) {
-  const res = await fetch(`${BASE}${path}`, { headers: { 'Content-Type': 'application/json', ...authHeader() } });
+  const res = await fetch(`${BASE}${path}`, {
+    headers: { 'Content-Type': 'application/json', ...authHeader() },
+  });
   const text = await res.text();
   let json; try { json = JSON.parse(text); } catch { json = { raw: text }; }
   return { ok: res.ok, status: res.status, json, text };
@@ -32,17 +36,21 @@ async function postJson(path, body) {
   return { ok: res.ok, status: res.status, json, text };
 }
 
-async function pollProgress(taskId, { maxMs = 30000, intervalMs = 1200 } = {}) {
-  const t0 = Date.now();
-  while (Date.now() - t0 < maxMs) {
+// Poll Dzine job/state until finished (up to 3 minutes)
+async function pollProgress(taskId, { maxMs = 180000, intervalMs = 1500 } = {}) {
+  const start = Date.now();
+  while (Date.now() - start < maxMs) {
     const { ok, status, json, text } = await getJson(`/get_task_progress/${encodeURIComponent(taskId)}`);
     if (!ok) return { ok, status, json, text };
-    const st = json?.data?.status;
+
+    const st = String(json?.data?.status || '').toLowerCase();
+    // Dzine statuses: waiting / in_queue / processing / uploading / succeeded / failed
     if (st === 'succeeded' || st === 'success') return { ok: true, status, json, text };
-    if (st === 'failed' || st === 'error') return { ok: false, status, json, text };
+    if (st === 'failed'   || st === 'error')   return { ok: false, status, json, text };
+
     await new Promise(r => setTimeout(r, intervalMs));
   }
-  return { ok: false, status: 504, json: { error: { message: 'Polling timeout' } }, text: 'timeout' };
+  return { ok: false, status: 504, json: { error: { message: 'Polling timeout (client limit)' } }, text: 'timeout' };
 }
 
 function firstResultUrl(progressJson) {
