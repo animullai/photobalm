@@ -30,83 +30,90 @@
   details{margin-top:10px}
   summary{cursor:pointer;font-weight:700}
   code,kbd{background:#f3f4f6;padding:2px 6px;border-radius:6px}
+  .radio-row{display:flex;gap:12px;margin-top:6px;align-items:center}
 </style>
 </head>
 <body>
-  <header>
-    <h1>Photobalm AI</h1>
-    <p>Restore and enhance portraits with Dzine.ai — private & secure.</p>
-  </header>
+<header>
+  <h1>Photobalm AI</h1>
+  <p>Restore and enhance portraits with Dzine.ai — private & secure.</p>
+</header>
 
-  <main class="wrap">
-    <!-- RESTORE -->
-    <section class="card">
-      <h2>Portrait Restoration</h2>
-      <div class="row">
-        <div class="col">
-          <div class="drop" id="drop-restore">
-            <input type="file" id="file-restore" accept="image/*" />
-            <div><strong>Drag & drop</strong> or click to select (JPG/PNG/WebP)</div>
-          </div>
-          <label for="r-scale">Upscale while restoring</label>
-          <select id="r-scale">
-            <option value="2">2× (recommended)</option>
-            <option value="1.5">1.5×</option>
-            <option value="3">3×</option>
-            <option value="4">4×</option>
-          </select>
-          <button class="btn" id="run-restore" style="margin-top:10px">Run Restore</button>
-          <div id="status-restore" class="status" style="display:none"></div>
+<main class="wrap">
+  <!-- RESTORE -->
+  <section class="card">
+    <h2>Portrait Restoration</h2>
+    <div class="row">
+      <div class="col">
+        <div class="drop" id="drop-restore">
+          <input type="file" id="file-restore" accept="image/*" />
+          <div><strong>Drag & drop</strong> or click to select (JPG/PNG/WebP)</div>
         </div>
-        <div class="col">
-          <div class="preview" id="input-restore">No image</div>
-          <div class="preview" id="output-restore" style="margin-top:10px">Result shows here</div>
-        </div>
-      </div>
-      <details>
-        <summary>Request / Response log</summary>
-        <pre id="log-restore" style="white-space:pre-wrap;font-size:12px"></pre>
-      </details>
-    </section>
+        <label for="r-scale">Upscale while restoring</label>
+        <select id="r-scale">
+          <option value="2">2× (recommended)</option>
+          <option value="1.5">1.5×</option>
+          <option value="3">3×</option>
+          <option value="4">4×</option>
+        </select>
 
-    <!-- UPSCALE -->
-    <section class="card">
-      <h2>Upscale</h2>
-      <div class="row">
-        <div class="col">
-          <div class="drop" id="drop-upscale">
-            <input type="file" id="file-upscale" accept="image/*" />
-            <div><strong>Drag & drop</strong> or click to select</div>
-          </div>
-          <label for="u-scale">Scale</label>
-          <select id="u-scale">
-            <option value="2">2×</option>
-            <option value="3">3×</option>
-            <option value="4">4×</option>
-          </select>
-          <button class="btn" id="run-upscale" style="margin-top:10px">Run Upscale</button>
-          <div id="status-upscale" class="status" style="display:none"></div>
+        <div class="radio-row">
+          <label><input type="radio" name="quality" value="standard" checked> Standard (fast)</label>
+          <label><input type="radio" name="quality" value="high"> High Quality (Dzine IMG2IMG)</label>
         </div>
-        <div class="col">
-          <div class="preview" id="input-upscale">No image</div>
-          <div class="preview" id="output-upscale" style="margin-top:10px">Result shows here</div>
-        </div>
-      </div>
-      <details>
-        <summary>Request / Response log</summary>
-        <pre id="log-upscale" style="white-space:pre-wrap;font-size:12px"></pre>
-      </details>
-    </section>
 
-    <section class="card">
-      <h3>Auth & Endpoints</h3>
-      <div class="note">
-        Cloudinary preset: <kbd>photobalm-upload</kbd><br>
-        Functions: <code>/.netlify/functions/restore</code>, <code>/.netlify/functions/upscale</code><br>
-        (Your Dzine API key stays private on Netlify)
+        <button class="btn" id="run-restore" style="margin-top:10px">Run Restore</button>
+        <div id="status-restore" class="status" style="display:none"></div>
       </div>
-    </section>
-  </main>
+      <div class="col">
+        <div class="preview" id="input-restore">No image</div>
+        <div class="preview" id="output-restore" style="margin-top:10px">Result shows here</div>
+      </div>
+    </div>
+    <details>
+      <summary>Request / Response log</summary>
+      <pre id="log-restore" style="white-space:pre-wrap;font-size:12px"></pre>
+    </details>
+  </section>
+
+  <!-- UPSCALE -->
+  <section class="card">
+    <h2>Upscale</h2>
+    <div class="row">
+      <div class="col">
+        <div class="drop" id="drop-upscale">
+          <input type="file" id="file-upscale" accept="image/*" />
+          <div><strong>Drag & drop</strong> or click to select</div>
+        </div>
+        <label for="u-scale">Scale</label>
+        <select id="u-scale">
+          <option value="2">2×</option>
+          <option value="3">3×</option>
+          <option value="4">4×</option>
+        </select>
+        <button class="btn" id="run-upscale" style="margin-top:10px">Run Upscale</button>
+        <div id="status-upscale" class="status" style="display:none"></div>
+      </div>
+      <div class="col">
+        <div class="preview" id="input-upscale">No image</div>
+        <div class="preview" id="output-upscale" style="margin-top:10px">Result shows here</div>
+      </div>
+    </div>
+    <details>
+      <summary>Request / Response log</summary>
+      <pre id="log-upscale" style="white-space:pre-wrap;font-size:12px"></pre>
+    </details>
+  </section>
+
+  <section class="card">
+    <h3>Auth & Endpoints</h3>
+    <div class="note">
+      Cloudinary preset: <kbd>photobalm-upload</kbd><br>
+      Functions: <code>/.netlify/functions/restore</code>, <code>/.netlify/functions/upscale</code><br>
+      (Your Dzine API key stays private on Netlify)
+    </div>
+  </section>
+</main>
 
 <script>
 /* ---------- SETTINGS ---------- */
@@ -114,162 +121,85 @@ const CLOUDINARY_CLOUD_NAME = 'drqxthmef';
 const CLOUDINARY_UPLOAD_PRESET = 'photobalm-upload';
 
 /* ---------- HELPERS ---------- */
-const $ = (id) => document.getElementById(id);
+const $ = id => document.getElementById(id);
+function logLine(pre, ...p){const t=p.map(x=>typeof x==='string'?x:JSON.stringify(x,null,2)).join(' ');pre.textContent+=(pre.textContent?'\n':'')+t;}
+function setStatus(el,msg,err=false){el.textContent=msg;el.style.display='block';el.className='status'+(err?' err':'');}
+function previewFile(input,prev){prev.innerHTML='No image';const f=input.files&&input.files[0]?input.files[0]:null;if(!f)return null;const u=URL.createObjectURL(f);const i=new Image();i.onload=()=>URL.revokeObjectURL(u);i.src=u;prev.innerHTML='';prev.appendChild(i);return f;}
+async function uploadToCloudinary(f){const u=`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/auto/upload`;const form=new FormData();form.append('file',f);form.append('upload_preset',CLOUDINARY_UPLOAD_PRESET);const r=await fetch(u,{method:'POST',body:form});if(!r.ok)throw new Error(await r.text());return r.json();}
 
-function logLine(preEl, ...parts){
-  const t = parts.map(x => typeof x === 'string' ? x : JSON.stringify(x, null, 2)).join(' ');
-  preEl.textContent += (preEl.textContent ? '\n' : '') + t;
-}
-
-function setStatus(el, msg, isErr=false){
-  el.textContent = msg;
-  el.style.display = 'block';
-  el.className = 'status' + (isErr ? ' err' : '');
-}
-
-function previewFile(input, previewEl){
-  previewEl.innerHTML = 'No image';
-  const f = input.files && input.files[0] ? input.files[0] : null;
-  if(!f) return null;
-  const url = URL.createObjectURL(f);
-  const img = new Image();
-  img.onload = () => URL.revokeObjectURL(url);
-  img.src = url;
-  previewEl.innerHTML = '';
-  previewEl.appendChild(img);
-  return f;
-}
-
-async function uploadToCloudinary(file){
-  const url = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/auto/upload`;
-  const form = new FormData();
-  form.append('file', file);
-  form.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
-  const res = await fetch(url, { method:'POST', body: form });
-  if(!res.ok) throw new Error(await res.text());
-  return res.json(); // { secure_url, ... }
-}
-
-/* ---------- POLLING-AWARE CALLERS (fixed: no double-read) ---------- */
-async function callRestore(imageUrl, opts, logEl, statusEl){
-  logLine(logEl, 'POST /restore', { image_url: imageUrl, options: opts });
-  const res = await fetch('/.netlify/functions/restore', {
-    method:'POST',
-    headers:{ 'Content-Type':'application/json' },
-    body: JSON.stringify({ image_url: imageUrl, options: opts })
-  });
-
-  // Handle 202 first (so we don't read the same body twice)
-  if (res.status === 202) {
-    const { task_id } = await res.json();
-    logLine(logEl, 'Accepted, task_id:', task_id);
-    setStatus(statusEl, 'Processing… (this can take a bit)');
-    const started = Date.now();
-    while (Date.now() - started < 180000) { // up to 3 minutes
-      await new Promise(r => setTimeout(r, 1500));
-      const s = await fetch(`/.netlify/functions/restore?task_id=${encodeURIComponent(task_id)}`);
-      const sj = await s.json().catch(()=> ({}));
-      logLine(logEl, 'GET status', sj);
-      if (s.ok && sj.processed_url) return sj.processed_url;
-      // else keep polling
+/* ---------- CALLERS ---------- */
+async function callRestore(imageUrl,opts,logEl,statusEl,quality){
+  const fn = quality==='high' ? '/.netlify/functions/restore' : '/.netlify/functions/upscale'; // both accept same format now
+  logLine(logEl,'POST',fn,{image_url:imageUrl,options:opts});
+  const res = await fetch(fn,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({image_url:imageUrl,options:opts})});
+  if(res.status===202){
+    const {task_id}=await res.json();logLine(logEl,'Accepted task_id',task_id);
+    setStatus(statusEl,'Processing… (this may take up to 2 min)');
+    const start=Date.now();
+    while(Date.now()-start<180000){
+      await new Promise(r=>setTimeout(r,1500));
+      const s=await fetch(`${fn}?task_id=${encodeURIComponent(task_id)}`);
+      const j=await s.json().catch(()=>({}));
+      logLine(logEl,'GET status',j);
+      if(s.ok&&j.processed_url)return j.processed_url;
     }
     throw new Error('Restore still running (timeout).');
   }
-
-  // Non-202: direct JSON success
-  if (res.ok && res.headers.get('Content-Type')?.includes('application/json')) {
-    const j = await res.json();
-    if (j.processed_url) return j.processed_url;
+  if(res.ok&&res.headers.get('Content-Type')?.includes('application/json')){
+    const j=await res.json();if(j.processed_url)return j.processed_url;
   }
-
-  // Hard error
   throw new Error(await res.text());
 }
 
-async function callUpscale(imageUrl, opts, logEl, statusEl){
-  logLine(logEl, 'POST /upscale', { image_url: imageUrl, options: opts });
-  const res = await fetch('/.netlify/functions/upscale', {
-    method:'POST',
-    headers:{ 'Content-Type':'application/json' },
-    body: JSON.stringify({ image_url: imageUrl, options: opts })
-  });
-
-  if (res.status === 202) {
-    const { task_id } = await res.json();
-    logLine(logEl, 'Accepted, task_id:', task_id);
-    setStatus(statusEl, 'Processing…');
-    const started = Date.now();
-    while (Date.now() - started < 180000) {
-      await new Promise(r => setTimeout(r, 1500));
-      const s = await fetch(`/.netlify/functions/upscale?task_id=${encodeURIComponent(task_id)}`);
-      const sj = await s.json().catch(()=> ({}));
-      logLine(logEl, 'GET status', sj);
-      if (s.ok && sj.processed_url) return sj.processed_url;
+async function callUpscale(imageUrl,opts,logEl,statusEl){
+  logLine(logEl,'POST /upscale',{image_url:imageUrl,options:opts});
+  const res=await fetch('/.netlify/functions/upscale',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({image_url:imageUrl,options:opts})});
+  if(res.status===202){
+    const {task_id}=await res.json();logLine(logEl,'Accepted task_id',task_id);
+    setStatus(statusEl,'Processing…');
+    const start=Date.now();
+    while(Date.now()-start<180000){
+      await new Promise(r=>setTimeout(r,1500));
+      const s=await fetch(`/.netlify/functions/upscale?task_id=${encodeURIComponent(task_id)}`);
+      const j=await s.json().catch(()=>({}));
+      logLine(logEl,'GET status',j);
+      if(s.ok&&j.processed_url)return j.processed_url;
     }
     throw new Error('Upscale still running (timeout).');
   }
-
-  if (res.ok && res.headers.get('Content-Type')?.includes('application/json')) {
-    const j = await res.json();
-    if (j.processed_url) return j.processed_url;
+  if(res.ok&&res.headers.get('Content-Type')?.includes('application/json')){
+    const j=await res.json();if(j.processed_url)return j.processed_url;
   }
-
   throw new Error(await res.text());
 }
 
 /* ---------- WIRE UI ---------- */
 function wireTool(prefix){
-  const drop = $(`drop-${prefix}`);
-  const input = $(`file-${prefix}`);
-  const runBtn = $(`run-${prefix}`);
-  const inpPrev = $(`input-${prefix}`);
-  const outPrev = $(`output-${prefix}`);
-  const statusEl = $(`status-${prefix}`);
-  const logEl = $(`log-${prefix}`);
-
-  drop.addEventListener('click', () => input.click());
-  input.addEventListener('change', () => previewFile(input, inpPrev));
-
-  runBtn.addEventListener('click', async () => {
+  const drop=$(`drop-${prefix}`),input=$(`file-${prefix}`),run=$(`run-${prefix}`),
+        inpPrev=$(`input-${prefix}`),outPrev=$(`output-${prefix}`),
+        status=$(`status-${prefix}`),log=$(`log-${prefix}`);
+  drop.addEventListener('click',()=>input.click());
+  input.addEventListener('change',()=>previewFile(input,inpPrev));
+  run.addEventListener('click',async()=>{
     try{
-      logEl.textContent = '';
-      setStatus(statusEl, 'Uploading to Cloudinary…');
-      runBtn.disabled = true;
-
-      const file = previewFile(input, inpPrev);
-      if(!file){ setStatus(statusEl, 'Choose an image first.', true); runBtn.disabled = false; return; }
-
-      // 1) Upload to Cloudinary
-      const up = await uploadToCloudinary(file);
-      const imageUrl = up.secure_url;
-      logLine(logEl, 'Cloudinary URL', imageUrl);
-      setStatus(statusEl, 'Starting job…');
-
-      // 2) Call function (with polling)
-      let resultUrl;
-      if(prefix === 'restore'){
-        const scaleSel = $('r-scale'); const upscale = Number(scaleSel.value);
-        resultUrl = await callRestore(imageUrl, { upscale }, logEl, statusEl);
-      } else {
-        const scaleSel = $('u-scale'); const scale = Number(scaleSel.value);
-        resultUrl = await callUpscale(imageUrl, { scale }, logEl, statusEl);
+      log.textContent='';setStatus(status,'Uploading to Cloudinary…');run.disabled=true;
+      const file=previewFile(input,inpPrev);if(!file){setStatus(status,'Choose an image first.',true);run.disabled=false;return;}
+      const up=await uploadToCloudinary(file);const imageUrl=up.secure_url;logLine(log,'Cloudinary URL',imageUrl);setStatus(status,'Starting job…');
+      let result;
+      if(prefix==='restore'){
+        const scaleSel=$('r-scale');const upscale=Number(scaleSel.value);
+        const quality=document.querySelector('input[name="quality"]:checked').value;
+        result=await callRestore(imageUrl,{upscale},log,status,quality);
+      }else{
+        const scaleSel=$('u-scale');const scale=Number(scaleSel.value);
+        result=await callUpscale(imageUrl,{scale},log,status);
       }
-
-      // 3) Show result
-      outPrev.innerHTML = `<img alt="Result" src="${resultUrl}">`;
-      setStatus(statusEl, 'Done!');
-    }catch(e){
-      console.error(e);
-      setStatus(statusEl, String(e.message || e), true);
-      alert((prefix === 'restore' ? 'Restore' : 'Upscale') + ' failed: ' + (e.message || e));
-    }finally{
-      runBtn.disabled = false;
-    }
+      outPrev.innerHTML=`<img alt="Result" src="${result}">`;setStatus(status,'Done!');
+    }catch(e){console.error(e);setStatus(status,String(e.message||e),true);alert(`${prefix==='restore'?'Restore':'Upscale'} failed: ${e.message||e}`);}
+    finally{run.disabled=false;}
   });
 }
-
-wireTool('restore');
-wireTool('upscale');
+wireTool('restore');wireTool('upscale');
 </script>
 </body>
 </html>
